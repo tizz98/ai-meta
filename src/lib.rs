@@ -9,8 +9,12 @@
 
 pub mod cli;
 pub mod commands;
+pub mod config;
 pub mod context;
+pub mod detect;
 pub mod error;
 pub mod output;
+pub mod profile;
+pub mod rules;
 pub mod state;
 pub mod version;
