@@ -7,6 +7,7 @@
 //!
 //! The binary entry point is thin; everything testable lives here in the lib.
 
+pub mod claudegen;
 pub mod cli;
 pub mod commands;
 pub mod config;
@@ -17,5 +18,7 @@ pub mod output;
 pub mod process;
 pub mod profile;
 pub mod rules;
+pub mod scaffold;
 pub mod state;
+pub mod template;
 pub mod version;
