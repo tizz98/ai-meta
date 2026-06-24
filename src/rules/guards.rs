@@ -41,18 +41,21 @@ pub fn run(id: GuardId, ctx: &GuardCtx) -> GuardResult {
     match id {
         GuardId::NoPanicInLib => nontest_scan(
             ctx,
+            id,
             r"\.unwrap\(\)|\.expect\(|panic!\(|unreachable!\(",
             "no unwrap/expect/panic! in non-test code",
             "force-panic ops (unwrap/expect/panic!/unreachable!) in non-test code — prefer typed errors / graceful degradation",
         ),
         GuardId::NoBlockingInAsync => nontest_scan(
             ctx,
+            id,
             r"std::thread::sleep|std::fs::(read|write|File::)|reqwest::blocking",
             "no blocking std calls in async code",
             "blocking std call in async code — use the async equivalents (tokio::time::sleep, tokio::fs)",
         ),
         GuardId::NoDbgInLib => nontest_scan(
             ctx,
+            id,
             r"\bdbg!\(",
             "no dbg!() left in non-test code",
             "dbg!() macro left in non-test code — remove debug prints before committing",
@@ -60,6 +63,7 @@ pub fn run(id: GuardId, ctx: &GuardCtx) -> GuardResult {
         GuardId::StrictTsconfig => strict_tsconfig(ctx),
         GuardId::NoDebugger => simple_scan(
             ctx,
+            id,
             r"(^|[^.\w])debugger\s*;",
             "no 'debugger' statements",
             "stray 'debugger' statement(s) committed — remove before merging",
@@ -67,6 +71,7 @@ pub fn run(id: GuardId, ctx: &GuardCtx) -> GuardResult {
         ),
         GuardId::NoTsIgnore => simple_scan(
             ctx,
+            id,
             r"@ts-ignore",
             "no @ts-ignore (expect-error preferred)",
             "@ts-ignore found — prefer '@ts-expect-error <reason>' so stale suppressions fail the build",
@@ -76,6 +81,7 @@ pub fn run(id: GuardId, ctx: &GuardCtx) -> GuardResult {
         GuardId::NoPrintInLib => print_in_lib(ctx),
         GuardId::NoBareExcept => simple_scan(
             ctx,
+            id,
             r"except\s*:",
             "no bare 'except:' clauses",
             "bare 'except:' swallows everything — catch a specific exception type",
@@ -100,7 +106,7 @@ pub fn run_custom(c: &CustomGuard, ctx: &GuardCtx) -> GuardResult {
     if !ctx.has_sources() {
         return GuardResult::Skip("no sources yet".into());
     }
-    let hits = scan(ctx, &re, &c.roots, c.exclude_tests);
+    let hits = scan(ctx, &re, &c.roots, c.exclude_tests, &c.name);
     if hits.is_empty() {
         GuardResult::Pass(format!("{}: clean", c.name))
     } else {
@@ -118,17 +124,18 @@ pub fn run_custom(c: &CustomGuard, ctx: &GuardCtx) -> GuardResult {
 
 // --- guard implementations ---------------------------------------------------
 
-fn nontest_scan(ctx: &GuardCtx, pattern: &str, pass: &str, trip: &str) -> GuardResult {
+fn nontest_scan(ctx: &GuardCtx, id: GuardId, pattern: &str, pass: &str, trip: &str) -> GuardResult {
     if !ctx.has_sources() {
         return GuardResult::Skip("no sources yet".into());
     }
     let re = compile(pattern);
-    let hits = scan(ctx, &re, &[], true);
+    let hits = scan(ctx, &re, &[], true, id.name());
     finish(hits, pass, trip)
 }
 
 fn simple_scan(
     ctx: &GuardCtx,
+    id: GuardId,
     pattern: &str,
     pass: &str,
     trip: &str,
@@ -138,7 +145,7 @@ fn simple_scan(
         return GuardResult::Skip("no sources yet".into());
     }
     let re = compile(pattern);
-    let hits = scan(ctx, &re, &[], exclude_tests);
+    let hits = scan(ctx, &re, &[], exclude_tests, id.name());
     finish(hits, pass, trip)
 }
 
@@ -164,7 +171,7 @@ fn console_log(ctx: &GuardCtx) -> GuardResult {
         return GuardResult::Skip("no sources yet".into());
     }
     let re = compile(r"console\.log\(");
-    let hits: Vec<Hit> = scan(ctx, &re, &[], false)
+    let hits: Vec<Hit> = scan(ctx, &re, &[], false, GuardId::NoConsoleLog.name())
         .into_iter()
         .filter(|h| !h.file.contains("src/cli/") && !h.file.starts_with("cli/"))
         .collect();
@@ -180,7 +187,7 @@ fn print_in_lib(ctx: &GuardCtx) -> GuardResult {
         return GuardResult::Skip("no sources yet".into());
     }
     let re = compile(r"\bprint\(");
-    let hits: Vec<Hit> = scan(ctx, &re, &[], true)
+    let hits: Vec<Hit> = scan(ctx, &re, &[], true, GuardId::NoPrintInLib.name())
         .into_iter()
         .filter(|h| {
             !h.file.contains("/cli/")
@@ -215,6 +222,9 @@ fn no_focused_tests(ctx: &GuardCtx) -> GuardResult {
     for f in &test_files {
         let rel = grep::rel_display(ctx.root, f);
         for (line, text) in grep::match_lines(&grep::read(f), &re) {
+            if is_allowed(&text, GuardId::NoFocusedTests.name()) {
+                continue;
+            }
             hits.push(Hit {
                 file: rel.clone(),
                 line,
@@ -390,7 +400,13 @@ fn py_name(spec: &str) -> String {
 
 // --- shared helpers ----------------------------------------------------------
 
-fn scan(ctx: &GuardCtx, re: &Regex, roots: &[String], exclude_tests: bool) -> Vec<Hit> {
+fn scan(
+    ctx: &GuardCtx,
+    re: &Regex,
+    roots: &[String],
+    exclude_tests: bool,
+    allow_id: &str,
+) -> Vec<Hit> {
     let is_rust = ctx.profile == ProfileKind::Rust;
     let mut out = Vec::new();
     for path in grep::collect_files(ctx.root, ctx.source_exts, roots) {
@@ -405,6 +421,9 @@ fn scan(ctx: &GuardCtx, re: &Regex, roots: &[String], exclude_tests: bool) -> Ve
             grep::match_lines(&text, re)
         };
         for (line, text) in matched {
+            if is_allowed(&text, allow_id) {
+                continue;
+            }
             out.push(Hit {
                 file: rel.clone(),
                 line,
@@ -413,6 +432,21 @@ fn scan(ctx: &GuardCtx, re: &Regex, roots: &[String], exclude_tests: bool) -> Ve
         }
     }
     out
+}
+
+/// True if `line` carries an inline suppression for guard `id`, e.g.
+/// `Regex::new(P).expect(...) // meta-allow: no-panic-in-lib`. The marker must be
+/// on the hit line itself and works with any comment syntax (`//`, `#`, `/* */`,
+/// `<!-- -->` …) since only the `meta-allow:` text is matched. It lists one or
+/// more comma/space-separated guard ids — a deliberately narrow scope so a
+/// suppression never silences a guard it wasn't written for.
+fn is_allowed(line: &str, id: &str) -> bool {
+    match line.find("meta-allow:") {
+        Some(pos) => line[pos + "meta-allow:".len()..]
+            .split([',', ' '])
+            .any(|t| t.trim() == id),
+        None => false,
+    }
 }
 
 fn finish(hits: Vec<Hit>, pass: &str, trip: &str) -> GuardResult {
@@ -431,7 +465,9 @@ fn render(hits: Vec<Hit>) -> Vec<String> {
 }
 
 fn compile(pattern: &str) -> Regex {
-    Regex::new(pattern).expect("built-in guard pattern is valid")
+    // Built-in patterns are hardcoded constants validated by tests; a compile
+    // failure is a programmer bug to surface now, not a runtime condition.
+    Regex::new(pattern).expect("built-in guard pattern is valid") // meta-allow: no-panic-in-lib
 }
 
 #[cfg(test)]
@@ -482,6 +518,60 @@ mod tests {
             }
             other => panic!("expected trip, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn is_allowed_matches_only_the_named_guard() {
+        let line = "x.unwrap(); // meta-allow: no-panic-in-lib";
+        assert!(is_allowed(line, "no-panic-in-lib"));
+        assert!(!is_allowed(line, "no-dbg-in-lib"));
+        assert!(!is_allowed("x.unwrap();", "no-panic-in-lib"));
+        // Multiple ids on one marker.
+        assert!(is_allowed(
+            "y // meta-allow: no-dbg-in-lib, no-panic-in-lib",
+            "no-panic-in-lib"
+        ));
+        // A substring of the id must not count as a match.
+        assert!(!is_allowed("z // meta-allow: panic", "no-panic-in-lib"));
+    }
+
+    #[test]
+    fn inline_allow_suppresses_only_marked_lines() {
+        let tmp = tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("src")).unwrap();
+        fs::write(
+            tmp.path().join("src/lib.rs"),
+            "fn a() { x.unwrap(); } // meta-allow: no-panic-in-lib\nfn b() { y.unwrap(); }\n",
+        )
+        .unwrap();
+        let exts = vec!["rs".to_string()];
+        match run(
+            GuardId::NoPanicInLib,
+            &ctx(tmp.path(), ProfileKind::Rust, &exts),
+        ) {
+            GuardResult::Trip { hits, .. } => {
+                assert_eq!(hits.len(), 1);
+                assert!(hits[0].contains("src/lib.rs:2"));
+            }
+            other => panic!("expected trip, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_allow_works_with_any_comment_style() {
+        // The marker is matched by its text, independent of comment syntax.
+        assert!(is_allowed(
+            "x = y # meta-allow: no-panic-in-lib",
+            "no-panic-in-lib"
+        ));
+        assert!(is_allowed(
+            "foo() /* meta-allow: no-panic-in-lib */",
+            "no-panic-in-lib"
+        ));
+        assert!(is_allowed(
+            "<x> <!-- meta-allow: no-console-log -->",
+            "no-console-log"
+        ));
     }
 
     #[test]

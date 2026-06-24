@@ -312,7 +312,9 @@ fn domain_of(rel: &str) -> String {
 }
 
 fn compile(pattern: &str) -> Regex {
-    Regex::new(pattern).expect("built-in signal pattern is valid")
+    // Built-in patterns are hardcoded constants validated by tests; a compile
+    // failure is a programmer bug to surface now, not a runtime condition.
+    Regex::new(pattern).expect("built-in signal pattern is valid") // meta-allow: no-panic-in-lib
 }
 
 #[cfg(test)]
