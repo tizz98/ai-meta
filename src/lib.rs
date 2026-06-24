@@ -20,5 +20,6 @@ pub mod profile;
 pub mod rules;
 pub mod scaffold;
 pub mod state;
+pub mod sync;
 pub mod template;
 pub mod version;

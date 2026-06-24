@@ -157,7 +157,9 @@ pub fn claude_managed_block(cfg: &EffectiveConfig) -> String {
         .var("build", cfg.build.clone().unwrap_or_default())
         .var("test", cfg.test.clone().unwrap_or_default())
         .var("deps_doc", cfg.deps_doc.clone().unwrap_or_else(|| "docs/dependencies.md".into()));
-    render(CLAUDE_MANAGED, &ctx)
+    // Normalize surrounding newlines so the block round-trips identically
+    // through `replace_managed` (which trims) on every `upgrade`.
+    render(CLAUDE_MANAGED, &ctx).trim_matches('\n').to_string()
 }
 
 fn claude_md(cfg: &EffectiveConfig) -> String {
@@ -316,6 +318,32 @@ fn extract_managed(s: &str) -> Option<String> {
     let start = s.find(MANAGED_START)? + MANAGED_START.len();
     let end = s.find(MANAGED_END)?;
     Some(s[start..end].trim_matches('\n').to_string())
+}
+
+/// Write `content` to `path`, creating parents, optionally setting the
+/// executable bit (used for the shim). Shared by `init` and `upgrade`.
+pub fn write_file(path: &std::path::Path, content: &str, executable: bool) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, content)?;
+    if executable {
+        set_executable(path)?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_executable(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(path, perms)
+}
+
+#[cfg(not(unix))]
+fn set_executable(_path: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// Ensure every non-empty line of `additions` is present in `existing`.

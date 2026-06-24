@@ -2,6 +2,7 @@
 //! baked profile defaults into an [`EffectiveConfig`].
 
 pub mod defaults;
+pub mod migrate;
 pub mod schema;
 
 pub use defaults::EffectiveConfig;
@@ -23,7 +24,10 @@ pub fn load(root: &Path) -> Result<EffectiveConfig> {
     let text = std::fs::read_to_string(&path).map_err(|e| {
         Error::Config(format!("cannot read {}: {e}", path.display()))
     })?;
-    load_from_str(root, &text)
+    let cfg = load_from_str(root, &text)?;
+    // Cheap per-invocation compatibility nudge (file-based loads only).
+    crate::sync::compat::runtime_note(&cfg.framework_version);
+    Ok(cfg)
 }
 
 /// Resolve config from in-memory TOML text (the testable core of [`load`]).

@@ -94,7 +94,7 @@ pub fn run(args: InitArgs) -> anyhow::Result<i32> {
     if meta_exists && !args.force {
         output::note(".meta/meta.toml exists — keeping it (use --force to overwrite)");
     } else {
-        write_file(&meta_path, &meta_toml, false)?;
+        scaffold::write_file(&meta_path, &meta_toml, false)?;
         output::ok("wrote .meta/meta.toml");
     }
 
@@ -103,7 +103,7 @@ pub fn run(args: InitArgs) -> anyhow::Result<i32> {
         let path = root.join(&a.path);
         let existing = std::fs::read_to_string(&path).ok();
         let content = scaffold::resolve_content(a, existing.as_deref());
-        write_file(&path, &content, a.executable)?;
+        scaffold::write_file(&path, &content, a.executable)?;
     }
     output::ok(format!("wrote {} managed files", artifacts.len()));
 
@@ -126,26 +126,3 @@ fn plan_label(root: &Path, a: &Artifact) -> String {
     }
 }
 
-fn write_file(path: &Path, content: &str, executable: bool) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, content)?;
-    if executable {
-        set_executable(path)?;
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn set_executable(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = std::fs::metadata(path)?.permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path, perms)
-}
-
-#[cfg(not(unix))]
-fn set_executable(_path: &Path) -> std::io::Result<()> {
-    Ok(())
-}
