@@ -1,0 +1,31 @@
+# .meta/meta.toml — ai-meta managing itself (dogfood).
+# Profile defaults are baked into the binary; this file only records identity
+# and overrides.
+
+[meta]
+schema_version = 1
+framework_version = "0.1.0"
+profile = "rust"
+
+[project]
+title = "ai-meta"
+description = "The LLM's missing meta framework — one versioned CLI that scaffolds, lints, and syncs project tooling across repos."
+
+[github]
+domains = ["cli", "config", "profile", "rules", "github", "template", "sync", "docs"]
+
+[coverage]
+# ai-meta's binary is largely IO/CLI glue; gate the testable core, not the shell.
+min = 0
+
+[deps]
+doc = "docs/dependencies.md"
+allowlist = [
+  "clap", "anyhow", "thiserror", "serde", "serde_json", "toml", "toml_edit",
+  "regex", "walkdir", "similar", "octocrab", "tokio",
+  "tempfile", "assert_cmd", "predicates",
+]
+
+[[version.locations]]
+path = "Cargo.toml"
+anchor = '^version\s*='
