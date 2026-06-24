@@ -8,6 +8,18 @@ It replaces the copy-pasted bash `./meta` that otherwise drifts across repos:
 the framework lives in one binary, projects carry only a tiny `.meta/meta.toml`
 and a ~40-line `./meta` shim that fetches the pinned binary.
 
+## Install
+
+One-time setup — installs the `meta` CLI onto your PATH:
+
+```
+curl -fsSL https://raw.githubusercontent.com/tizz98/ai-meta/main/install.sh | bash
+```
+
+This fetches the latest release binary (checksum-verified) into
+`~/.local/bin`. Override with `AI_META_VERSION` (pin a version) or
+`AI_META_BIN_DIR` (install location). Then run `meta init` in a repo.
+
 ## What it does
 
 - **`meta init`** — scaffold `.meta/meta.toml`, the `./meta` shim, GitHub Actions
