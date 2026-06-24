@@ -4,7 +4,7 @@
 //! the profile's set minus `disabled`, with severity/threshold overrides and any
 //! custom guards appended.
 
-use super::schema::MetaFile;
+use super::schema::{CodegenEntry, ExtraGate, ExtraStep, MetaFile};
 use crate::output;
 use crate::profile::{CoverageTool, Profile, ProfileKind, VersionLocation};
 use crate::rules::model::{
@@ -39,6 +39,10 @@ pub struct EffectiveConfig {
     pub coverage_tool: CoverageTool,
     pub coverage_min: u32,
     pub coverage_summary: Option<String>,
+
+    pub codegen: Vec<CodegenEntry>,
+    pub ci_extra_gates: Vec<ExtraGate>,
+    pub ci_extra_steps: Vec<ExtraStep>,
 
     pub milestones: Vec<(String, String)>,
     pub label_colors: Vec<(String, String)>,
@@ -112,6 +116,10 @@ pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConf
             .summary_path
             .clone()
             .or_else(|| profile.coverage_summary.clone()),
+
+        codegen: file.codegen.clone(),
+        ci_extra_gates: file.ci.extra_gates.clone(),
+        ci_extra_steps: file.ci.extra_steps.clone(),
 
         milestones: file
             .milestones

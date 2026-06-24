@@ -14,6 +14,7 @@ pub mod context;
 pub mod detect;
 pub mod error;
 pub mod output;
+pub mod process;
 pub mod profile;
 pub mod rules;
 pub mod state;
