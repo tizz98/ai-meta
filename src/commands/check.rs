@@ -31,7 +31,10 @@ pub fn run(args: CheckArgs) -> anyhow::Result<i32> {
         &root,
         "check",
         status,
-        &format!("{} pass / {} warn / {} fail", report.pass, report.warn, report.fail),
+        &format!(
+            "{} pass / {} warn / {} fail",
+            report.pass, report.warn, report.fail
+        ),
     );
     Ok(code)
 }
@@ -41,7 +44,11 @@ fn render(report: &CheckReport) {
     println!();
     for e in &report.entries {
         let badge = badge(e.verdict);
-        println!("  {badge}  {}  {}", output::bold(&e.name), output::dim(&e.summary));
+        println!(
+            "  {badge}  {}  {}",
+            output::bold(&e.name),
+            output::dim(&e.summary)
+        );
         for h in &e.hits {
             println!("        {}", output::dim(h));
         }

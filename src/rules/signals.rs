@@ -31,7 +31,10 @@ pub struct TicketDraft {
 pub enum SignalResult {
     Skip(String),
     /// Findings (possibly empty → clean, using `clean` as the OK summary).
-    Findings { findings: Vec<Finding>, clean: String },
+    Findings {
+        findings: Vec<Finding>,
+        clean: String,
+    },
 }
 
 pub struct SignalCtx<'a> {
@@ -87,7 +90,12 @@ pub fn run(id: SignalId, ctx: &SignalCtx) -> SignalResult {
     }
 }
 
-fn oversized(ctx: &SignalCtx, files: &[std::path::PathBuf], watch: u32, ticket: u32) -> SignalResult {
+fn oversized(
+    ctx: &SignalCtx,
+    files: &[std::path::PathBuf],
+    watch: u32,
+    ticket: u32,
+) -> SignalResult {
     let mut findings = Vec::new();
     for f in files {
         let rel = grep::rel_display(ctx.root, f);
@@ -107,7 +115,9 @@ fn oversized(ctx: &SignalCtx, files: &[std::path::PathBuf], watch: u32, ticket: 
             findings.push(Finding {
                 level: SignalLevel::Watch,
                 summary: format!("large file: {rel} ({lines} lines ≥ {watch})"),
-                detail: format!("Approaching the {ticket}-line refactor threshold — watch for further growth."),
+                detail: format!(
+                    "Approaching the {ticket}-line refactor threshold — watch for further growth."
+                ),
                 ticket: None,
             });
         }
@@ -177,7 +187,12 @@ fn fragility(ctx: &SignalCtx, files: &[std::path::PathBuf], watch: u32) -> Signa
     )
 }
 
-fn deep_nesting(ctx: &SignalCtx, files: &[std::path::PathBuf], cols: u32, watch: u32) -> SignalResult {
+fn deep_nesting(
+    ctx: &SignalCtx,
+    files: &[std::path::PathBuf],
+    cols: u32,
+    watch: u32,
+) -> SignalResult {
     let re = compile(&format!(r"^ {{{cols},}}[^ ]"));
     let mut findings = Vec::new();
     for f in files {
@@ -187,7 +202,9 @@ fn deep_nesting(ctx: &SignalCtx, files: &[std::path::PathBuf], cols: u32, watch:
             findings.push(Finding {
                 level: SignalLevel::Watch,
                 summary: format!("deep nesting: {rel} ({n} lines indented ≥ {cols} cols)"),
-                detail: "Flatten with early-returns / the ? operator / guard clauses; extract helpers.".into(),
+                detail:
+                    "Flatten with early-returns / the ? operator / guard clauses; extract helpers."
+                        .into(),
                 ticket: None,
             });
         }
@@ -223,12 +240,16 @@ fn debt_markers(
     if total >= total_ticket {
         findings.push(Finding {
             level: SignalLevel::Ticket,
-            summary: format!("high debt-marker load: {total} markers across product code (≥ {total_ticket})"),
+            summary: format!(
+                "high debt-marker load: {total} markers across product code (≥ {total_ticket})"
+            ),
             detail: "Triage and burn down TODO/FIXME/HACK debt markers.".into(),
             ticket: Some(TicketDraft {
                 title: "Triage and burn down TODO/FIXME/HACK debt markers".into(),
                 domain: "core".into(),
-                body: "Group related markers, close stale ones, promote real work to tracked tasks.".into(),
+                body:
+                    "Group related markers, close stale ones, promote real work to tracked tasks."
+                        .into(),
             }),
         });
     }
@@ -314,7 +335,10 @@ mod tests {
         let tmp = tempdir().unwrap();
         let exts = vec!["rs".to_string()];
         assert!(matches!(
-            run(SignalId::OversizedFiles, &ctx(tmp.path(), &exts, ProfileKind::Rust)),
+            run(
+                SignalId::OversizedFiles,
+                &ctx(tmp.path(), &exts, ProfileKind::Rust)
+            ),
             SignalResult::Skip(_)
         ));
     }
@@ -327,7 +351,10 @@ mod tests {
         fs::write(tmp.path().join("core/big.rs"), big).unwrap();
         fs::write(tmp.path().join("core/small.rs"), "fn a(){}\n").unwrap();
         let exts = vec!["rs".to_string()];
-        match run(SignalId::OversizedFiles, &ctx(tmp.path(), &exts, ProfileKind::Rust)) {
+        match run(
+            SignalId::OversizedFiles,
+            &ctx(tmp.path(), &exts, ProfileKind::Rust),
+        ) {
             SignalResult::Findings { findings, .. } => {
                 assert_eq!(findings.len(), 1);
                 assert_eq!(findings[0].level, SignalLevel::Ticket);
@@ -345,7 +372,10 @@ mod tests {
         let big = "x\n".repeat(650);
         fs::write(tmp.path().join("core/tests/huge_test.rs"), big).unwrap();
         let exts = vec!["rs".to_string()];
-        match run(SignalId::OversizedFiles, &ctx(tmp.path(), &exts, ProfileKind::Rust)) {
+        match run(
+            SignalId::OversizedFiles,
+            &ctx(tmp.path(), &exts, ProfileKind::Rust),
+        ) {
             SignalResult::Skip(_) => {} // only a test file -> no product sources
             other => panic!("got {other:?}"),
         }
@@ -358,7 +388,10 @@ mod tests {
         let body: String = (0..30).map(|i| format!("// TODO item {i}\n")).collect();
         fs::write(tmp.path().join("src/a.rs"), body).unwrap();
         let exts = vec!["rs".to_string()];
-        match run(SignalId::DebtMarkers, &ctx(tmp.path(), &exts, ProfileKind::Rust)) {
+        match run(
+            SignalId::DebtMarkers,
+            &ctx(tmp.path(), &exts, ProfileKind::Rust),
+        ) {
             SignalResult::Findings { findings, .. } => {
                 assert!(findings.iter().any(|f| f.level == SignalLevel::Ticket));
             }

@@ -22,7 +22,12 @@ pub fn available(disabled: bool) -> bool {
 
 /// Ask `claude` for a one-line project description, seeded from the repo's
 /// README + detected layout. Returns `None` on any failure (caller falls back).
-pub fn describe_project(root: &Path, title: &str, profile: &str, domains: &[String]) -> Option<String> {
+pub fn describe_project(
+    root: &Path,
+    title: &str,
+    profile: &str,
+    domains: &[String],
+) -> Option<String> {
     let readme = read_readme(root);
     let domains_line = if domains.is_empty() {
         String::new()

@@ -31,8 +31,12 @@ impl Repo {
                 "no 'origin' remote — set one or run inside a GitHub clone.",
             ));
         }
-        parse_remote(out.stdout.trim())
-            .ok_or_else(|| Error::msg(format!("could not parse a GitHub repo from {:?}", out.stdout.trim())))
+        parse_remote(out.stdout.trim()).ok_or_else(|| {
+            Error::msg(format!(
+                "could not parse a GitHub repo from {:?}",
+                out.stdout.trim()
+            ))
+        })
     }
 }
 
@@ -98,8 +102,12 @@ impl Github {
     }
 
     fn patch(&self, route: String, body: Value) -> Result<Value> {
-        self.block(async { self.crab.patch::<Value, _, Value>(&route, Some(&body)).await })
-            .map_err(api_err)
+        self.block(async {
+            self.crab
+                .patch::<Value, _, Value>(&route, Some(&body))
+                .await
+        })
+        .map_err(api_err)
     }
 
     /// Raw GraphQL query, for Projects v2.
@@ -136,9 +144,11 @@ impl Github {
 
     /// Create-or-update a milestone by title, returning its number.
     pub fn ensure_milestone(&self, title: &str, desc: &str) -> Result<u64> {
-        if let Some(m) = self.list_milestones()?.into_iter().find(|m| {
-            m.get("title").and_then(|t| t.as_str()) == Some(title)
-        }) {
+        if let Some(m) = self
+            .list_milestones()?
+            .into_iter()
+            .find(|m| m.get("title").and_then(|t| t.as_str()) == Some(title))
+        {
             let num = m.get("number").and_then(|n| n.as_u64()).unwrap_or(0);
             if !desc.is_empty() {
                 let _ = self.patch(
@@ -245,7 +255,10 @@ impl Github {
     /// List an issue's sub-issues (GitHub sub-issues REST API). Returns an empty
     /// list if the repo/issue has none (or the API is unavailable).
     pub fn sub_issues(&self, number: u64) -> Result<Vec<Value>> {
-        let route = format!("/repos/{}/issues/{number}/sub_issues?per_page=100", self.repo.nwo());
+        let route = format!(
+            "/repos/{}/issues/{number}/sub_issues?per_page=100",
+            self.repo.nwo()
+        );
         match self.get(route) {
             Ok(v) => Ok(v.as_array().cloned().unwrap_or_default()),
             Err(_) => Ok(Vec::new()),
@@ -275,7 +288,10 @@ impl Github {
 pub fn upsert_marked_comment(gh: &Github, number: u64, marker: &str, body: &str) -> Result<()> {
     let comments = gh.list_comments(number)?;
     if let Some(existing) = comments.iter().find(|c| {
-        c.get("body").and_then(|b| b.as_str()).map(|b| b.contains(marker)).unwrap_or(false)
+        c.get("body")
+            .and_then(|b| b.as_str())
+            .map(|b| b.contains(marker))
+            .unwrap_or(false)
     }) {
         let id = existing.get("id").and_then(|i| i.as_u64()).unwrap_or(0);
         gh.update_comment(id, body)
@@ -306,7 +322,10 @@ mod tests {
 
     #[test]
     fn parses_https_remote_with_and_without_git() {
-        assert_eq!(parse_remote("https://github.com/a/b.git").unwrap().nwo(), "a/b");
+        assert_eq!(
+            parse_remote("https://github.com/a/b.git").unwrap().nwo(),
+            "a/b"
+        );
         assert_eq!(parse_remote("https://github.com/a/b").unwrap().nwo(), "a/b");
     }
 

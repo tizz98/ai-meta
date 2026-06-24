@@ -18,7 +18,10 @@ pub fn run(args: UpgradeArgs) -> anyhow::Result<i32> {
     let root = context::require_root()?;
     let meta_path = config::config_path(&root);
     let meta_old = std::fs::read_to_string(&meta_path).map_err(|e| {
-        anyhow::anyhow!("cannot read {} (run `meta init` first): {e}", meta_path.display())
+        anyhow::anyhow!(
+            "cannot read {} (run `meta init` first): {e}",
+            meta_path.display()
+        )
     })?;
 
     let target = match &args.to {
@@ -66,13 +69,23 @@ pub fn run(args: UpgradeArgs) -> anyhow::Result<i32> {
     }
 
     // Note any ignored files that would otherwise have changed.
-    for c in plan.changes.iter().filter(|c| c.ignored && c.kind != ChangeKind::Unchanged) {
-        output::note(format!("{} changed upstream but is in [sync] ignore — skipped", c.path));
+    for c in plan
+        .changes
+        .iter()
+        .filter(|c| c.ignored && c.kind != ChangeKind::Unchanged)
+    {
+        output::note(format!(
+            "{} changed upstream but is in [sync] ignore — skipped",
+            c.path
+        ));
     }
 
     println!();
     if args.dry_run {
-        output::note(format!("dry run — {} file(s) would change. Re-run without --dry-run to apply.", modified.len()));
+        output::note(format!(
+            "dry run — {} file(s) would change. Re-run without --dry-run to apply.",
+            modified.len()
+        ));
         return Ok(0);
     }
 

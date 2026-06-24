@@ -47,10 +47,18 @@ pub fn detect(root: &Path) -> Detection {
         det.kind = Some(ProfileKind::TypeScript);
         det.markers.push("package.json".into());
         infer_typescript(root, &mut det);
-    } else if has("pyproject.toml") || has("setup.py") || has("setup.cfg") || has("requirements.txt")
+    } else if has("pyproject.toml")
+        || has("setup.py")
+        || has("setup.cfg")
+        || has("requirements.txt")
     {
         det.kind = Some(ProfileKind::Python);
-        for m in ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"] {
+        for m in [
+            "pyproject.toml",
+            "setup.py",
+            "setup.cfg",
+            "requirements.txt",
+        ] {
             if has(m) {
                 det.markers.push(m.into());
             }
@@ -68,11 +76,10 @@ pub fn detect(root: &Path) -> Detection {
         ("pyproject.toml", ProfileKind::Python),
     ] {
         if det.kind != Some(kind) && has(other) {
-            det.notes
-                .push(format!("also saw {other}; chose {} by priority", det
-                    .kind
-                    .map(|k| k.name())
-                    .unwrap_or("generic")));
+            det.notes.push(format!(
+                "also saw {other}; chose {} by priority",
+                det.kind.map(|k| k.name()).unwrap_or("generic")
+            ));
         }
     }
 
@@ -120,8 +127,10 @@ fn infer_typescript(root: &Path, det: &mut Detection) {
         det.commands.coverage = Some("npm run coverage".into());
     }
     if !scripts.is_empty() {
-        det.notes
-            .push(format!("inferred from package.json scripts: {}", scripts.join(", ")));
+        det.notes.push(format!(
+            "inferred from package.json scripts: {}",
+            scripts.join(", ")
+        ));
     }
     det.domains = child_dirs(&root.join("src"), &[]);
     if det.domains.is_empty() {
@@ -271,7 +280,10 @@ mod tests {
         let d = detect(tmp.path());
         assert_eq!(d.kind, Some(ProfileKind::TypeScript));
         assert_eq!(d.commands.typecheck.as_deref(), Some("npm run typecheck"));
-        assert_eq!(d.commands.coverage.as_deref(), Some("npm run test:coverage"));
+        assert_eq!(
+            d.commands.coverage.as_deref(),
+            Some("npm run test:coverage")
+        );
         assert_eq!(d.domains, vec!["bot", "engine"]);
     }
 

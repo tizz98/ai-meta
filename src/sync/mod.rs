@@ -186,7 +186,11 @@ mod tests {
         let (cfg, meta) = cfg_for(root);
 
         // First write everything.
-        apply(root, &plan(root, &cfg, &meta, &meta, FRAMEWORK_VERSION, &[])).unwrap();
+        apply(
+            root,
+            &plan(root, &cfg, &meta, &meta, FRAMEWORK_VERSION, &[]),
+        )
+        .unwrap();
 
         // User edits prose outside the managed markers.
         let claude_path = root.join("CLAUDE.md");
@@ -195,7 +199,11 @@ mod tests {
         fs::write(&claude_path, &content).unwrap();
 
         // Re-plan/apply: managed block regenerates, user prose survives.
-        apply(root, &plan(root, &cfg, &meta, &meta, FRAMEWORK_VERSION, &[])).unwrap();
+        apply(
+            root,
+            &plan(root, &cfg, &meta, &meta, FRAMEWORK_VERSION, &[]),
+        )
+        .unwrap();
         let after = fs::read_to_string(&claude_path).unwrap();
         assert!(after.contains("## My notes"));
         assert!(after.contains("hand-written."));

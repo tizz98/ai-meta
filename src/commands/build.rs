@@ -34,7 +34,12 @@ pub enum Outcome {
 pub fn run_command(cfg: &EffectiveConfig, cmd: Option<&str>, label: &str) -> Outcome {
     let cmd = match cmd {
         Some(c) if !c.trim().is_empty() => c,
-        _ => return Outcome::Skipped(format!("no {label} command for the {} profile", cfg.profile_kind.name())),
+        _ => {
+            return Outcome::Skipped(format!(
+                "no {label} command for the {} profile",
+                cfg.profile_kind.name()
+            ))
+        }
     };
     let prog = process::program_of(cmd).unwrap_or_default();
     if !process::which(&prog) {

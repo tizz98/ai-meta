@@ -59,7 +59,11 @@ fn parse(raw: &str) -> Option<Record> {
 /// Human-readable "passed (3h ago)" describing the key, or "never run".
 pub fn describe(root: &Path, key: &str) -> String {
     match read(root, key) {
-        Some(r) => format!("{} ({})", r.status, ago(now_epoch().saturating_sub(r.epoch))),
+        Some(r) => format!(
+            "{} ({})",
+            r.status,
+            ago(now_epoch().saturating_sub(r.epoch))
+        ),
         None => "never run".to_string(),
     }
 }

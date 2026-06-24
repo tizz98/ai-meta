@@ -44,7 +44,10 @@ pub fn run(args: WaveArgs) -> anyhow::Result<i32> {
                 .into_iter()
                 .filter(|s| status_of(s) == "todo" && state_of(s) == "open")
                 .collect();
-            print_subs(&format!("Ready wave for #{epic} (status:todo, open)"), &ready);
+            print_subs(
+                &format!("Ready wave for #{epic} (status:todo, open)"),
+                &ready,
+            );
             output::info(format!("\n{} task(s) ready to dispatch.", ready.len()));
         }
     }
@@ -65,10 +68,16 @@ fn num(i: &Value) -> u64 {
     i.get("number").and_then(|n| n.as_u64()).unwrap_or(0)
 }
 fn title(i: &Value) -> String {
-    i.get("title").and_then(|t| t.as_str()).unwrap_or("").to_string()
+    i.get("title")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 fn state_of(i: &Value) -> String {
-    i.get("state").and_then(|s| s.as_str()).unwrap_or("open").to_string()
+    i.get("state")
+        .and_then(|s| s.as_str())
+        .unwrap_or("open")
+        .to_string()
 }
 fn status_of(i: &Value) -> String {
     i.get("labels")

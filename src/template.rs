@@ -83,7 +83,10 @@ mod tests {
     #[test]
     fn if_block_included_and_excluded() {
         let on = Ctx::new().flag("cov", true).var("min", "80");
-        assert_eq!(render("x{{#if cov}} gate {{min}}{{/if}}y", &on), "x gate 80y");
+        assert_eq!(
+            render("x{{#if cov}} gate {{min}}{{/if}}y", &on),
+            "x gate 80y"
+        );
         let off = Ctx::new();
         assert_eq!(render("x{{#if cov}} gate{{/if}}y", &off), "xy");
     }
@@ -91,9 +94,6 @@ mod tests {
     #[test]
     fn multiple_if_blocks() {
         let ctx = Ctx::new().flag("a", true);
-        assert_eq!(
-            render("{{#if a}}A{{/if}}-{{#if b}}B{{/if}}", &ctx),
-            "A-"
-        );
+        assert_eq!(render("{{#if a}}A{{/if}}-{{#if b}}B{{/if}}", &ctx), "A-");
     }
 }

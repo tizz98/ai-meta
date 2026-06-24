@@ -21,9 +21,8 @@ pub fn config_path(root: &Path) -> std::path::PathBuf {
 /// Load + validate + resolve the config at `root`.
 pub fn load(root: &Path) -> Result<EffectiveConfig> {
     let path = config_path(root);
-    let text = std::fs::read_to_string(&path).map_err(|e| {
-        Error::Config(format!("cannot read {}: {e}", path.display()))
-    })?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| Error::Config(format!("cannot read {}: {e}", path.display())))?;
     let cfg = load_from_str(root, &text)?;
     // Cheap per-invocation compatibility nudge (file-based loads only).
     crate::sync::compat::runtime_note(&cfg.framework_version);

@@ -47,19 +47,84 @@ const META_MD: &str = include_str!("assets/meta.md");
 /// Command catalog used to generate per-command skills + docs.
 /// (cmd, one-line description, body sentence, usage suffix)
 const SKILL_COMMANDS: &[(&str, &str, &str, &str)] = &[
-    ("status", "Project state at a glance.", "Show branch, milestone progress, task counts, and the last build/test/check.", ""),
-    ("task", "Track work as GitHub issues.", "Create/list/show/start/block/done/comment on tasks; state is carried by status:* labels.", " <list|show|new|start|block|done|comment>"),
-    ("milestone", "Delivery-milestone progress.", "List milestones with completion %, or show a milestone's issues.", " <list|show>"),
-    ("wave", "Plan a parallelizable wave.", "Plan a wave of ready sub-issues for subagent dispatch (read-only).", " <list|show|ready>"),
-    ("gen", "Run configured code generators.", "Run the [[codegen]] entries whose trigger files exist.", " [--list]"),
-    ("build", "Build the project.", "Run the profile/config build command (auto-runs codegen first).", ""),
-    ("test", "Run the project's tests.", "Run the test command, or the coverage command with --coverage.", " [--coverage]"),
-    ("check", "Enforce codified standards.", "Run the configured guards; CI runs with --strict.", " [--strict] [--json]"),
-    ("ci", "Local merge gate.", "Run all gates mirroring CI and post a collapsed PR comment.", " [PR]"),
-    ("arch", "Architecture review (advisory).", "Flag tech-debt signals and draft refactor tickets.", " [--strict] [--json]"),
-    ("setup", "Bootstrap GitHub structure.", "Idempotently create labels, milestones, and the project board.", " [--dry-run]"),
-    ("tag", "Cut a release.", "Bump the version across configured locations, commit, tag, and push.", " [major|minor|patch|vX.Y.Z]"),
-    ("upgrade", "Pull framework updates.", "Regenerate managed artifacts and migrate meta.toml to a newer ai-meta.", " [--dry-run]"),
+    (
+        "status",
+        "Project state at a glance.",
+        "Show branch, milestone progress, task counts, and the last build/test/check.",
+        "",
+    ),
+    (
+        "task",
+        "Track work as GitHub issues.",
+        "Create/list/show/start/block/done/comment on tasks; state is carried by status:* labels.",
+        " <list|show|new|start|block|done|comment>",
+    ),
+    (
+        "milestone",
+        "Delivery-milestone progress.",
+        "List milestones with completion %, or show a milestone's issues.",
+        " <list|show>",
+    ),
+    (
+        "wave",
+        "Plan a parallelizable wave.",
+        "Plan a wave of ready sub-issues for subagent dispatch (read-only).",
+        " <list|show|ready>",
+    ),
+    (
+        "gen",
+        "Run configured code generators.",
+        "Run the [[codegen]] entries whose trigger files exist.",
+        " [--list]",
+    ),
+    (
+        "build",
+        "Build the project.",
+        "Run the profile/config build command (auto-runs codegen first).",
+        "",
+    ),
+    (
+        "test",
+        "Run the project's tests.",
+        "Run the test command, or the coverage command with --coverage.",
+        " [--coverage]",
+    ),
+    (
+        "check",
+        "Enforce codified standards.",
+        "Run the configured guards; CI runs with --strict.",
+        " [--strict] [--json]",
+    ),
+    (
+        "ci",
+        "Local merge gate.",
+        "Run all gates mirroring CI and post a collapsed PR comment.",
+        " [PR]",
+    ),
+    (
+        "arch",
+        "Architecture review (advisory).",
+        "Flag tech-debt signals and draft refactor tickets.",
+        " [--strict] [--json]",
+    ),
+    (
+        "setup",
+        "Bootstrap GitHub structure.",
+        "Idempotently create labels, milestones, and the project board.",
+        " [--dry-run]",
+    ),
+    (
+        "tag",
+        "Cut a release.",
+        "Bump the version across configured locations, commit, tag, and push.",
+        " [major|minor|patch|vX.Y.Z]",
+    ),
+    (
+        "upgrade",
+        "Pull framework updates.",
+        "Regenerate managed artifacts and migrate meta.toml to a newer ai-meta.",
+        " [--dry-run]",
+    ),
 ];
 
 /// All framework-managed artifacts for `cfg` (everything except meta.toml).
@@ -156,7 +221,12 @@ pub fn claude_managed_block(cfg: &EffectiveConfig) -> String {
         .flag("has_test", cfg.test.is_some())
         .var("build", cfg.build.clone().unwrap_or_default())
         .var("test", cfg.test.clone().unwrap_or_default())
-        .var("deps_doc", cfg.deps_doc.clone().unwrap_or_else(|| "docs/dependencies.md".into()));
+        .var(
+            "deps_doc",
+            cfg.deps_doc
+                .clone()
+                .unwrap_or_else(|| "docs/dependencies.md".into()),
+        );
     // Normalize surrounding newlines so the block round-trips identically
     // through `replace_managed` (which trims) on every `upgrade`.
     render(CLAUDE_MANAGED, &ctx).trim_matches('\n').to_string()
@@ -389,7 +459,9 @@ mod tests {
         assert!(paths.contains(&".github/workflows/ci.yml"));
         assert!(paths.contains(&"CLAUDE.md"));
         assert!(paths.contains(&"META.md"));
-        assert!(paths.iter().any(|p| p.starts_with(".claude/skills/meta-check/")));
+        assert!(paths
+            .iter()
+            .any(|p| p.starts_with(".claude/skills/meta-check/")));
         // shim is executable
         assert!(arts.iter().find(|a| a.path == "meta").unwrap().executable);
     }

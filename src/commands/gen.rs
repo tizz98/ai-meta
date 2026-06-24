@@ -21,7 +21,12 @@ pub fn run(args: GenArgs) -> anyhow::Result<i32> {
         } else {
             output::head("Configured generators");
             for g in &cfg.codegen {
-                println!("  {}  {}  (trigger: {})", output::bold(&g.name), g.command, g.trigger);
+                println!(
+                    "  {}  {}  (trigger: {})",
+                    output::bold(&g.name),
+                    g.command,
+                    g.trigger
+                );
             }
         }
         return Ok(0);
@@ -45,7 +50,10 @@ pub fn run_generators(cfg: &EffectiveConfig, only: Option<&str>) -> i32 {
             }
         }
         if !cfg.root.join(&g.trigger).exists() {
-            output::note(format!("gen: {} skipped (no trigger {})", g.name, g.trigger));
+            output::note(format!(
+                "gen: {} skipped (no trigger {})",
+                g.name, g.trigger
+            ));
             continue;
         }
         let prog = process::program_of(&g.command).unwrap_or_default();

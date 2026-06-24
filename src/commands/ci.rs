@@ -43,8 +43,15 @@ pub fn run(args: CiArgs) -> anyhow::Result<i32> {
     gates.push(Gate {
         name: "standards".into(),
         hard: true,
-        outcome: if check.exit_code(true) == 0 { GateOutcome::Pass } else { GateOutcome::Fail },
-        detail: format!("{} pass / {} warn / {} fail", check.pass, check.warn, check.fail),
+        outcome: if check.exit_code(true) == 0 {
+            GateOutcome::Pass
+        } else {
+            GateOutcome::Fail
+        },
+        detail: format!(
+            "{} pass / {} warn / {} fail",
+            check.pass, check.warn, check.fail
+        ),
     });
 
     // Gates 2-5: format, lint, typecheck, test.
@@ -88,7 +95,9 @@ pub fn run(args: CiArgs) -> anyhow::Result<i32> {
     render(&gates);
     let body = comment_body(&cfg, &gates);
 
-    let failed = gates.iter().any(|g| g.hard && g.outcome == GateOutcome::Fail);
+    let failed = gates
+        .iter()
+        .any(|g| g.hard && g.outcome == GateOutcome::Fail);
     let _ = state::record(
         &root,
         "ci",
@@ -136,7 +145,11 @@ fn cmd_gate(cfg: &EffectiveConfig, name: &str, cmd: Option<&str>, hard: bool) ->
     Gate {
         name: name.into(),
         hard,
-        outcome: if code == 0 { GateOutcome::Pass } else { GateOutcome::Fail },
+        outcome: if code == 0 {
+            GateOutcome::Pass
+        } else {
+            GateOutcome::Fail
+        },
         detail: cmd.to_string(),
     }
 }
@@ -152,7 +165,11 @@ fn extra_gate(cfg: &EffectiveConfig, eg: &crate::config::schema::ExtraGate) -> G
             };
         }
     }
-    let cwd = eg.cwd.as_ref().map(|c| cfg.root.join(c)).unwrap_or_else(|| cfg.root.clone());
+    let cwd = eg
+        .cwd
+        .as_ref()
+        .map(|c| cfg.root.join(c))
+        .unwrap_or_else(|| cfg.root.clone());
     let prog = process::program_of(&eg.command).unwrap_or_default();
     if !process::which(&prog) {
         return Gate {
@@ -167,7 +184,11 @@ fn extra_gate(cfg: &EffectiveConfig, eg: &crate::config::schema::ExtraGate) -> G
     Gate {
         name: eg.name.clone(),
         hard: eg.hard,
-        outcome: if code == 0 { GateOutcome::Pass } else { GateOutcome::Fail },
+        outcome: if code == 0 {
+            GateOutcome::Pass
+        } else {
+            GateOutcome::Fail
+        },
         detail: eg.command.clone(),
     }
 }
@@ -200,7 +221,11 @@ fn coverage_gate(cfg: &EffectiveConfig) -> Gate {
         return Gate {
             name: "coverage".into(),
             hard: gated,
-            outcome: if gated { GateOutcome::Fail } else { GateOutcome::Skip },
+            outcome: if gated {
+                GateOutcome::Fail
+            } else {
+                GateOutcome::Skip
+            },
             detail: format!("coverage command exited {code}"),
         };
     }
@@ -234,7 +259,10 @@ fn coverage_gate(cfg: &EffectiveConfig) -> Gate {
             name: "coverage".into(),
             hard: true,
             outcome: GateOutcome::Fail, // fail closed
-            detail: format!("coverage percent unavailable (gate ≥ {}%)", cfg.coverage_min),
+            detail: format!(
+                "coverage percent unavailable (gate ≥ {}%)",
+                cfg.coverage_min
+            ),
         },
     }
 }
@@ -249,7 +277,8 @@ fn determine_coverage(cfg: &EffectiveConfig) -> Option<f64> {
         }
         CoverageTool::CargoLlvmCov => {
             let out =
-                process::run_captured("cargo llvm-cov report --summary-only --json", &cfg.root).ok()?;
+                process::run_captured("cargo llvm-cov report --summary-only --json", &cfg.root)
+                    .ok()?;
             if out.status != 0 {
                 return None;
             }
@@ -268,17 +297,30 @@ fn render(gates: &[Gate]) {
             GateOutcome::Skip => output::dim("⤵️  skip"),
         };
         let hard = if g.hard { "" } else { " (advisory)" };
-        println!("  {badge}  {}{}  {}", output::bold(&g.name), hard, output::dim(&g.detail));
+        println!(
+            "  {badge}  {}{}  {}",
+            output::bold(&g.name),
+            hard,
+            output::dim(&g.detail)
+        );
     }
 }
 
 /// Assemble the collapsed PR-comment body (posted by the GitHub layer in P6).
 fn comment_body(cfg: &EffectiveConfig, gates: &[Gate]) -> String {
-    let failed = gates.iter().any(|g| g.hard && g.outcome == GateOutcome::Fail);
-    let header = if failed { "❌ Local CI failed" } else { "✅ Local CI passed" };
+    let failed = gates
+        .iter()
+        .any(|g| g.hard && g.outcome == GateOutcome::Fail);
+    let header = if failed {
+        "❌ Local CI failed"
+    } else {
+        "✅ Local CI passed"
+    };
     let mut s = String::new();
     s.push_str(&format!("<!-- {}-local-ci -->\n", cfg.title));
-    s.push_str(&format!("**{header}**\n\n<details><summary>Gate details</summary>\n\n"));
+    s.push_str(&format!(
+        "**{header}**\n\n<details><summary>Gate details</summary>\n\n"
+    ));
     s.push_str("| Gate | Result | Detail |\n|---|---|---|\n");
     for g in gates {
         let r = match g.outcome {

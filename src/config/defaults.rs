@@ -7,9 +7,7 @@
 use super::schema::{CodegenEntry, ExtraGate, ExtraStep, MetaFile};
 use crate::output;
 use crate::profile::{CoverageTool, Profile, ProfileKind, VersionLocation};
-use crate::rules::model::{
-    CustomGuard, GuardId, ResolvedGuard, Severity, SignalId, Thresholds,
-};
+use crate::rules::model::{CustomGuard, GuardId, ResolvedGuard, Severity, SignalId, Thresholds};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -78,7 +76,10 @@ pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConf
         .unwrap_or_else(|| format!("{title} Roadmap"));
 
     EffectiveConfig {
-        schema_version: file.meta.schema_version.unwrap_or(crate::version::SCHEMA_VERSION),
+        schema_version: file
+            .meta
+            .schema_version
+            .unwrap_or(crate::version::SCHEMA_VERSION),
         framework_version: file
             .meta
             .framework_version
@@ -94,10 +95,26 @@ pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConf
         statuses: non_empty(&file.github.statuses, &profile.statuses),
         types: non_empty(&file.github.types, &profile.types),
 
-        build: file.commands.build.clone().or_else(|| profile.commands.build.clone()),
-        test: file.commands.test.clone().or_else(|| profile.commands.test.clone()),
-        fmt: file.commands.fmt.clone().or_else(|| profile.commands.fmt.clone()),
-        lint: file.commands.lint.clone().or_else(|| profile.commands.lint.clone()),
+        build: file
+            .commands
+            .build
+            .clone()
+            .or_else(|| profile.commands.build.clone()),
+        test: file
+            .commands
+            .test
+            .clone()
+            .or_else(|| profile.commands.test.clone()),
+        fmt: file
+            .commands
+            .fmt
+            .clone()
+            .or_else(|| profile.commands.fmt.clone()),
+        lint: file
+            .commands
+            .lint
+            .clone()
+            .or_else(|| profile.commands.lint.clone()),
         typecheck: file
             .commands
             .typecheck
@@ -143,7 +160,11 @@ pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConf
             .default_bump
             .clone()
             .unwrap_or_else(|| "minor".into()),
-        tag_prefix: file.version.tag_prefix.clone().unwrap_or_else(|| "auto".into()),
+        tag_prefix: file
+            .version
+            .tag_prefix
+            .clone()
+            .unwrap_or_else(|| "auto".into()),
         require_branch: file
             .version
             .require_branch
@@ -223,10 +244,7 @@ fn resolve_guards(profile: &Profile, file: &MetaFile) -> Vec<ResolvedGuard> {
                 .get(id.name())
                 .and_then(|s| parse_or_warn(Severity::from_str(s)))
                 .unwrap_or(*default_sev);
-            ResolvedGuard::Builtin {
-                id: *id,
-                severity,
-            }
+            ResolvedGuard::Builtin { id: *id, severity }
         })
         .collect();
 

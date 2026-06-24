@@ -39,7 +39,9 @@ impl FromStr for Severity {
             "skip" => Ok(Severity::Skip),
             "warn" => Ok(Severity::Warn),
             "fail" => Ok(Severity::Fail),
-            other => Err(format!("invalid severity {other:?} (expected pass|skip|warn|fail)")),
+            other => Err(format!(
+                "invalid severity {other:?} (expected pass|skip|warn|fail)"
+            )),
         }
     }
 }

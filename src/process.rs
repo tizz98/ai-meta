@@ -125,7 +125,10 @@ mod tests {
 
     #[test]
     fn splits_plain() {
-        assert_eq!(split_args("cargo build --workspace"), vec!["cargo", "build", "--workspace"]);
+        assert_eq!(
+            split_args("cargo build --workspace"),
+            vec!["cargo", "build", "--workspace"]
+        );
     }
 
     #[test]

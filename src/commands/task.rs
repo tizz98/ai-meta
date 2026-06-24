@@ -65,7 +65,10 @@ pub fn run(args: TaskArgs) -> anyhow::Result<i32> {
         TaskCmd::Show { number } => {
             let i = gh.get_issue(number)?;
             output::head(format!("#{} {}", number, title(&i)));
-            println!("  state:  {}", i.get("state").and_then(|s| s.as_str()).unwrap_or("?"));
+            println!(
+                "  state:  {}",
+                i.get("state").and_then(|s| s.as_str()).unwrap_or("?")
+            );
             println!("  labels: {}", labels_of(&i).join(", "));
             if let Some(m) = i.pointer("/milestone/title").and_then(|t| t.as_str()) {
                 println!("  milestone: {m}");
@@ -76,9 +79,22 @@ pub fn run(args: TaskArgs) -> anyhow::Result<i32> {
                 }
             }
         }
-        TaskCmd::New { title, r#type, domain, milestone, body } => {
-            let default_status = cfg.statuses.first().cloned().unwrap_or_else(|| "todo".into());
-            let mut labels = vec![format!("status:{default_status}"), format!("type:{}", r#type)];
+        TaskCmd::New {
+            title,
+            r#type,
+            domain,
+            milestone,
+            body,
+        } => {
+            let default_status = cfg
+                .statuses
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "todo".into());
+            let mut labels = vec![
+                format!("status:{default_status}"),
+                format!("type:{}", r#type),
+            ];
             if let Some(d) = domain {
                 labels.push(format!("domain:{d}"));
             }
@@ -122,7 +138,10 @@ fn num(i: &Value) -> u64 {
     i.get("number").and_then(|n| n.as_u64()).unwrap_or(0)
 }
 fn title(i: &Value) -> String {
-    i.get("title").and_then(|t| t.as_str()).unwrap_or("").to_string()
+    i.get("title")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 fn labels_of(i: &Value) -> Vec<String> {
     i.get("labels")

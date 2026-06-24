@@ -29,7 +29,11 @@ pub fn run(args: ArchArgs) -> anyhow::Result<i32> {
     let _ = state::record(
         &root,
         "arch",
-        if report.ticket > 0 { "tickets" } else { "clean" },
+        if report.ticket > 0 {
+            "tickets"
+        } else {
+            "clean"
+        },
         &format!("{} watch / {} ticket", report.watch, report.ticket),
     );
     Ok(code)
@@ -40,11 +44,21 @@ fn render(report: &ArchReport) {
     println!();
     for s in &report.signals {
         if let Some(reason) = &s.skipped {
-            println!("  {}  {}  {}", output::dim("SKIP"), output::bold(&s.name), output::dim(reason));
+            println!(
+                "  {}  {}  {}",
+                output::dim("SKIP"),
+                output::bold(&s.name),
+                output::dim(reason)
+            );
             continue;
         }
         if let Some(clean) = &s.clean {
-            println!("  {}  {}  {}", output::green("OK"), output::bold(&s.name), output::dim(clean));
+            println!(
+                "  {}  {}  {}",
+                output::green("OK"),
+                output::bold(&s.name),
+                output::dim(clean)
+            );
             continue;
         }
         for f in &s.findings {

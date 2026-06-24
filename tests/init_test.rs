@@ -32,7 +32,11 @@ fn init_rust_workspace_scaffolds_expected_files() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     git_init(root);
-    fs::write(root.join("Cargo.toml"), "[workspace]\nmembers = [\"core\"]\n").unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"core\"]\n",
+    )
+    .unwrap();
 
     meta(root).args(["init", "--no-ai"]).assert().success();
 
@@ -79,7 +83,11 @@ fn init_autodetects_python() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     git_init(root);
-    fs::write(root.join("pyproject.toml"), "[tool.ruff]\n[tool.pytest.ini_options]\n").unwrap();
+    fs::write(
+        root.join("pyproject.toml"),
+        "[tool.ruff]\n[tool.pytest.ini_options]\n",
+    )
+    .unwrap();
 
     meta(root).args(["init", "--no-ai"]).assert().success();
     let toml = fs::read_to_string(root.join(".meta/meta.toml")).unwrap();
@@ -95,7 +103,10 @@ fn init_dry_run_writes_nothing() {
     git_init(root);
     fs::write(root.join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
 
-    meta(root).args(["init", "--no-ai", "--dry-run"]).assert().success();
+    meta(root)
+        .args(["init", "--no-ai", "--dry-run"])
+        .assert()
+        .success();
     assert!(!root.join(".meta/meta.toml").exists());
     assert!(!root.join("meta").exists());
 }

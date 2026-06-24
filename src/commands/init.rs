@@ -125,4 +125,3 @@ fn plan_label(root: &Path, a: &Artifact) -> String {
         Ownership::AppendMerge => output::yellow("merge"),
     }
 }
-

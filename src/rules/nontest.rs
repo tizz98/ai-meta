@@ -22,25 +22,93 @@ fn cfg_test_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"#\[cfg\(test\)\]").expect("static regex"))
 }
 
-fn string_lit_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r#""([^"\\]|\\.)*""#).expect("static regex"))
-}
-
-fn char_lit_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"'[^']*'").expect("static regex"))
-}
-
-/// Strip string literals, char literals, and `//` line comments from a line —
-/// the `strip()` awk function — so brace/semicolon counting can't be fooled.
+/// Strip literal interiors and `//` line comments from a line so brace/semicolon
+/// counting only sees real code structure. Handles normal strings (`"…\"…"`),
+/// char literals (`'…'`), and Rust **raw strings** (`r"…"`, `r#"…"#`, with any
+/// hash count) — the latter is what a regex can't do (no backreferences) and is
+/// why the bash heuristic broke on `r#"{"#`. Code braces/semicolons are kept;
+/// literal contents and delimiters are dropped. Multi-line strings are not
+/// tracked (each line is stripped independently — a known limitation).
 fn strip(line: &str) -> String {
-    let s = string_lit_re().replace_all(line, "");
-    let s = char_lit_re().replace_all(&s, "");
-    match s.find("//") {
-        Some(i) => s[..i].to_string(),
-        None => s.to_string(),
+    let b = line.as_bytes();
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        // Line comment: rest of the line is dropped.
+        if c == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
+            break;
+        }
+        // Raw string: r, then zero+ '#', then '"' … '"' + same '#' count.
+        if c == b'r' {
+            let mut j = i + 1;
+            let mut hashes = 0;
+            while j < b.len() && b[j] == b'#' {
+                hashes += 1;
+                j += 1;
+            }
+            if j < b.len() && b[j] == b'"' {
+                i = skip_raw_string(b, j + 1, hashes);
+                continue;
+            }
+        }
+        // Normal string literal with backslash escapes.
+        if c == b'"' {
+            i += 1;
+            while i < b.len() {
+                if b[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if b[i] == b'"' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        // Char literal (coarse: to the next quote).
+        if c == b'\'' {
+            i += 1;
+            while i < b.len() {
+                if b[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if b[i] == b'\'' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c as char);
+        i += 1;
     }
+    out
+}
+
+/// Advance past a raw-string body that started after the opening quote at `from`,
+/// closing on `"` followed by `hashes` `#`. Returns the index just past the close.
+fn skip_raw_string(b: &[u8], from: usize, hashes: usize) -> usize {
+    let mut i = from;
+    while i < b.len() {
+        if b[i] == b'"' {
+            let mut k = i + 1;
+            let mut seen = 0;
+            while k < b.len() && seen < hashes && b[k] == b'#' {
+                seen += 1;
+                k += 1;
+            }
+            if seen == hashes {
+                return k;
+            }
+        }
+        i += 1;
+    }
+    b.len()
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -209,6 +277,25 @@ fn prod() { w.unwrap(); }
         let hits = rust_nontest_match_lines(src, &panic_re());
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 2);
+    }
+
+    #[test]
+    fn raw_string_braces_do_not_unbalance() {
+        // A raw string containing unbalanced braces inside the test block must
+        // not leak the skip onto the following production code.
+        let src = "\
+#[cfg(test)]
+mod tests {
+    fn t() {
+        let j = r#\"{ \"a\": { } \"#;
+        x.unwrap();
+    }
+}
+fn prod() { y.unwrap(); }
+";
+        let hits = rust_nontest_match_lines(src, &panic_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 8);
     }
 
     #[test]

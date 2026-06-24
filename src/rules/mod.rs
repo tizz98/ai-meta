@@ -59,18 +59,26 @@ pub fn run_checks(cfg: &EffectiveConfig) -> CheckReport {
             ResolvedGuard::Builtin { id, severity } => {
                 (id.name().to_string(), *severity, guards::run(*id, &ctx))
             }
-            ResolvedGuard::Custom(c) => {
-                (c.name.clone(), c.severity, guards::run_custom(c, &ctx))
-            }
+            ResolvedGuard::Custom(c) => (c.name.clone(), c.severity, guards::run_custom(c, &ctx)),
         };
         let entry = match result {
             GuardResult::Skip(summary) => {
                 report.skip += 1;
-                CheckEntry { name, verdict: Severity::Skip, summary, hits: vec![] }
+                CheckEntry {
+                    name,
+                    verdict: Severity::Skip,
+                    summary,
+                    hits: vec![],
+                }
             }
             GuardResult::Pass(summary) => {
                 report.pass += 1;
-                CheckEntry { name, verdict: Severity::Pass, summary, hits: vec![] }
+                CheckEntry {
+                    name,
+                    verdict: Severity::Pass,
+                    summary,
+                    hits: vec![],
+                }
             }
             GuardResult::Trip { summary, hits } => {
                 let verdict = match trip_severity {
@@ -83,7 +91,12 @@ pub fn run_checks(cfg: &EffectiveConfig) -> CheckReport {
                         Severity::Warn
                     }
                 };
-                CheckEntry { name, verdict, summary, hits }
+                CheckEntry {
+                    name,
+                    verdict,
+                    summary,
+                    hits,
+                }
             }
         };
         report.entries.push(entry);

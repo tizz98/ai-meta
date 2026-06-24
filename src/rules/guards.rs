@@ -182,7 +182,11 @@ fn print_in_lib(ctx: &GuardCtx) -> GuardResult {
     let re = compile(r"\bprint\(");
     let hits: Vec<Hit> = scan(ctx, &re, &[], true)
         .into_iter()
-        .filter(|h| !h.file.contains("/cli/") && !h.file.starts_with("cli/") && !h.file.ends_with("__main__.py"))
+        .filter(|h| {
+            !h.file.contains("/cli/")
+                && !h.file.starts_with("cli/")
+                && !h.file.ends_with("__main__.py")
+        })
         .collect();
     finish(
         hits,
@@ -211,7 +215,11 @@ fn no_focused_tests(ctx: &GuardCtx) -> GuardResult {
     for f in &test_files {
         let rel = grep::rel_display(ctx.root, f);
         for (line, text) in grep::match_lines(&grep::read(f), &re) {
-            hits.push(Hit { file: rel.clone(), line, text });
+            hits.push(Hit {
+                file: rel.clone(),
+                line,
+                text,
+            });
         }
     }
     finish(
@@ -274,7 +282,8 @@ fn rust_deps(root: &Path) -> Option<Vec<(String, String)>> {
         return None;
     }
     let dep_line = compile(r"^[A-Za-z0-9_-]+\s*=");
-    let section = compile(r"^\[(dependencies|dev-dependencies|build-dependencies|workspace\.dependencies)\]");
+    let section =
+        compile(r"^\[(dependencies|dev-dependencies|build-dependencies|workspace\.dependencies)\]");
     let any_section = compile(r"^\[");
     let mut out = Vec::new();
     for m in &manifests {
@@ -292,7 +301,11 @@ fn rust_deps(root: &Path) -> Option<Vec<(String, String)>> {
                 continue;
             }
             if in_deps && dep_line.is_match(trimmed) {
-                let name = trimmed.split([' ', '=', '.']).next().unwrap_or("").to_string();
+                let name = trimmed
+                    .split([' ', '=', '.'])
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
                 // workspace-inherited (`name.workspace = true`) and internal crates exempt.
                 if line.contains(".workspace") {
                     continue;
@@ -392,7 +405,11 @@ fn scan(ctx: &GuardCtx, re: &Regex, roots: &[String], exclude_tests: bool) -> Ve
             grep::match_lines(&text, re)
         };
         for (line, text) in matched {
-            out.push(Hit { file: rel.clone(), line, text });
+            out.push(Hit {
+                file: rel.clone(),
+                line,
+                text,
+            });
         }
     }
     out
@@ -437,7 +454,10 @@ mod tests {
     fn panic_guard_skips_when_no_sources() {
         let tmp = tempdir().unwrap();
         let exts = vec!["rs".to_string()];
-        let r = run(GuardId::NoPanicInLib, &ctx(tmp.path(), ProfileKind::Rust, &exts));
+        let r = run(
+            GuardId::NoPanicInLib,
+            &ctx(tmp.path(), ProfileKind::Rust, &exts),
+        );
         assert!(matches!(r, GuardResult::Skip(_)));
     }
 
@@ -451,7 +471,10 @@ mod tests {
         )
         .unwrap();
         let exts = vec!["rs".to_string()];
-        let r = run(GuardId::NoPanicInLib, &ctx(tmp.path(), ProfileKind::Rust, &exts));
+        let r = run(
+            GuardId::NoPanicInLib,
+            &ctx(tmp.path(), ProfileKind::Rust, &exts),
+        );
         match r {
             GuardResult::Trip { hits, .. } => {
                 assert_eq!(hits.len(), 1);
@@ -465,14 +488,28 @@ mod tests {
     fn strict_tsconfig_pass_and_fail() {
         let tmp = tempdir().unwrap();
         let exts = vec!["ts".to_string()];
-        fs::write(tmp.path().join("tsconfig.json"), r#"{ "compilerOptions": { "strict": true } }"#).unwrap();
+        fs::write(
+            tmp.path().join("tsconfig.json"),
+            r#"{ "compilerOptions": { "strict": true } }"#,
+        )
+        .unwrap();
         assert!(matches!(
-            run(GuardId::StrictTsconfig, &ctx(tmp.path(), ProfileKind::TypeScript, &exts)),
+            run(
+                GuardId::StrictTsconfig,
+                &ctx(tmp.path(), ProfileKind::TypeScript, &exts)
+            ),
             GuardResult::Pass(_)
         ));
-        fs::write(tmp.path().join("tsconfig.json"), r#"{ "compilerOptions": { } }"#).unwrap();
+        fs::write(
+            tmp.path().join("tsconfig.json"),
+            r#"{ "compilerOptions": { } }"#,
+        )
+        .unwrap();
         assert!(matches!(
-            run(GuardId::StrictTsconfig, &ctx(tmp.path(), ProfileKind::TypeScript, &exts)),
+            run(
+                GuardId::StrictTsconfig,
+                &ctx(tmp.path(), ProfileKind::TypeScript, &exts)
+            ),
             GuardResult::Trip { .. }
         ));
     }
@@ -486,12 +523,18 @@ mod tests {
         fs::write(tmp.path().join("src/cli/main.ts"), "console.log('ok')\n").unwrap();
         fs::write(tmp.path().join("src/bot/x.ts"), "let a=1;\n").unwrap();
         assert!(matches!(
-            run(GuardId::NoConsoleLog, &ctx(tmp.path(), ProfileKind::TypeScript, &exts)),
+            run(
+                GuardId::NoConsoleLog,
+                &ctx(tmp.path(), ProfileKind::TypeScript, &exts)
+            ),
             GuardResult::Pass(_)
         ));
         fs::write(tmp.path().join("src/bot/x.ts"), "console.log('leak')\n").unwrap();
         assert!(matches!(
-            run(GuardId::NoConsoleLog, &ctx(tmp.path(), ProfileKind::TypeScript, &exts)),
+            run(
+                GuardId::NoConsoleLog,
+                &ctx(tmp.path(), ProfileKind::TypeScript, &exts)
+            ),
             GuardResult::Trip { .. }
         ));
     }
@@ -522,8 +565,15 @@ mod tests {
         }
         // Document it -> pass.
         fs::create_dir_all(tmp.path().join("docs")).unwrap();
-        fs::write(tmp.path().join("docs/dependencies.md"), "sketchy: needed for X").unwrap();
-        assert!(matches!(run(GuardId::DepsJustified, &c), GuardResult::Pass(_)));
+        fs::write(
+            tmp.path().join("docs/dependencies.md"),
+            "sketchy: needed for X",
+        )
+        .unwrap();
+        assert!(matches!(
+            run(GuardId::DepsJustified, &c),
+            GuardResult::Pass(_)
+        ));
     }
 
     #[test]
