@@ -15,18 +15,17 @@ description = "The LLM's missing meta framework — one versioned CLI that scaff
 domains = ["cli", "config", "profile", "rules", "github", "template", "sync", "docs"]
 
 [rules.guards]
-# Two built-in Rust guards don't fit this codebase and are turned off here
-# (the engine still ships and enforces them for the repos it manages):
-#   - no-blocking-in-async: ai-meta is a synchronous CLI. The only async is an
-#     isolated `block_on` bridge to octocrab in src/github; every flagged
-#     `std::fs` call runs in synchronous code, where blocking IO is correct.
-#   - no-panic-in-lib: the genuine non-test uses are `Regex::new(<const>).expect()`
-#     on static, test-validated patterns — an accepted idiom (a provably-valid
-#     static regex can't be asserted without unwrap/expect/panic/unreachable).
-#     The rest are the engine's own multi-line test fixtures (strings holding
-#     example `unwrap()`s), which a per-line scanner can't fully exclude.
-#     Re-enable if fallible-input unwraps ever appear in real library code.
-disabled = ["no-blocking-in-async", "no-panic-in-lib"]
+# no-blocking-in-async doesn't fit this codebase and is turned off (the engine
+# still ships and enforces it for the repos it manages): ai-meta is a synchronous
+# CLI; the only async is an isolated `block_on` bridge to octocrab in src/github,
+# so every flagged `std::fs` call runs in synchronous code where blocking IO is
+# correct.
+#
+# no-panic-in-lib stays ON. Its only legitimate hits are static-regex compiles
+# (`Regex::new(<const>).expect()`), each annotated with an inline
+# `// meta-allow: no-panic-in-lib` marker explaining why a compile failure should
+# fail fast rather than degrade.
+disabled = ["no-blocking-in-async"]
 
 [coverage]
 # ai-meta's binary is largely IO/CLI glue; gate the testable core, not the shell.

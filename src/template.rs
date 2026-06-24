@@ -39,12 +39,16 @@ impl Ctx {
 
 fn if_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?s)\{\{#if\s+(\w+)\}\}(.*?)\{\{/if\}\}").expect("static regex"))
+    const PAT: &str = r"(?s)\{\{#if\s+(\w+)\}\}(.*?)\{\{/if\}\}";
+    // Hardcoded static pattern, validated by tests.
+    RE.get_or_init(|| Regex::new(PAT).expect("static regex")) // meta-allow: no-panic-in-lib
 }
 
 fn var_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\{\{\s*(\w+)\s*\}\}").expect("static regex"))
+    const PAT: &str = r"\{\{\s*(\w+)\s*\}\}";
+    // Hardcoded static pattern, validated by tests.
+    RE.get_or_init(|| Regex::new(PAT).expect("static regex")) // meta-allow: no-panic-in-lib
 }
 
 /// Render `template` against `ctx`. `{{#if}}` blocks are resolved first (so a

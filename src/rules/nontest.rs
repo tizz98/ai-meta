@@ -9,30 +9,62 @@
 //!
 //! Crucially, a braceless `#[cfg(test)] use …;` must NOT latch the skip onto the
 //! production code that follows it — the documented bug that let production
-//! `unwrap()` evade the guard. Before counting braces/semicolons we strip string
-//! literals, char literals, and `// line comments` so a brace inside a literal
-//! can't unbalance the count. Block comments (`/* { */`) and raw strings
-//! (`r#"{"#`) remain a known heuristic limitation, exactly as in the bash.
+//! `unwrap()` evade the guard. Before counting braces/semicolons (and before
+//! matching the guard pattern) we strip string literals, char literals, and
+//! `// line comments` so neither a brace nor the searched-for pattern inside a
+//! literal counts as real code. String state is carried **across lines**, so a
+//! multi-line string or raw string (e.g. a `let src = "…"` test fixture holding
+//! example `unwrap()`s) is fully ignored. Block comments (`/* … */`) remain a
+//! known heuristic limitation.
 
 use regex::Regex;
 use std::sync::OnceLock;
 
 fn cfg_test_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"#\[cfg\(test\)\]").expect("static regex"))
+    // A hardcoded static pattern; a compile failure is a programmer bug to
+    // surface immediately, not a runtime condition.
+    RE.get_or_init(|| Regex::new(r"#\[cfg\(test\)\]").expect("static regex")) // meta-allow: no-panic-in-lib
+}
+
+/// Tracks whether the scanner is inside a string literal that opened on an
+/// earlier line, so multi-line strings can be stripped across line boundaries.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Lit {
+    /// Real code (not inside any string literal).
+    Code,
+    /// Inside a normal `"…"` string left open by a previous line.
+    Str,
+    /// Inside a raw `r#"…"#` string (with the recorded `#` count) left open.
+    Raw(usize),
 }
 
 /// Strip literal interiors and `//` line comments from a line so brace/semicolon
-/// counting only sees real code structure. Handles normal strings (`"…\"…"`),
-/// char literals (`'…'`), and Rust **raw strings** (`r"…"`, `r#"…"#`, with any
-/// hash count) — the latter is what a regex can't do (no backreferences) and is
-/// why the bash heuristic broke on `r#"{"#`. Code braces/semicolons are kept;
-/// literal contents and delimiters are dropped. Multi-line strings are not
-/// tracked (each line is stripped independently — a known limitation).
-fn strip(line: &str) -> String {
+/// counting and pattern matching only see real code structure. `state` carries
+/// an unterminated string from the previous line; the returned [`Lit`] is the
+/// state to feed into the next line. Handles normal strings (`"…\"…"`), char
+/// literals (`'…'`), and Rust raw strings (`r"…"`, `r#"…"#`, any hash count),
+/// all of which may span multiple lines. Code braces/semicolons are kept;
+/// literal contents and delimiters are dropped. Block comments (`/* … */`) are
+/// the remaining known limitation.
+fn strip(line: &str, state: Lit) -> (String, Lit) {
     let b = line.as_bytes();
     let mut out = String::with_capacity(line.len());
     let mut i = 0;
+
+    // Finish a string left open by the previous line before scanning code.
+    match state {
+        Lit::Code => {}
+        Lit::Str => match consume_str(b, 0) {
+            Some(end) => i = end,
+            None => return (out, Lit::Str),
+        },
+        Lit::Raw(hashes) => match consume_raw(b, 0, hashes) {
+            Some(end) => i = end,
+            None => return (out, Lit::Raw(hashes)),
+        },
+    }
+
     while i < b.len() {
         let c = b[i];
         // Line comment: rest of the line is dropped.
@@ -48,27 +80,26 @@ fn strip(line: &str) -> String {
                 j += 1;
             }
             if j < b.len() && b[j] == b'"' {
-                i = skip_raw_string(b, j + 1, hashes);
-                continue;
+                match consume_raw(b, j + 1, hashes) {
+                    Some(end) => {
+                        i = end;
+                        continue;
+                    }
+                    None => return (out, Lit::Raw(hashes)),
+                }
             }
         }
-        // Normal string literal with backslash escapes.
+        // Normal string literal with backslash escapes (may run past EOL).
         if c == b'"' {
-            i += 1;
-            while i < b.len() {
-                if b[i] == b'\\' {
-                    i += 2;
+            match consume_str(b, i + 1) {
+                Some(end) => {
+                    i = end;
                     continue;
                 }
-                if b[i] == b'"' {
-                    i += 1;
-                    break;
-                }
-                i += 1;
+                None => return (out, Lit::Str),
             }
-            continue;
         }
-        // Char literal (coarse: to the next quote).
+        // Char literal (coarse: to the next quote; single line only).
         if c == b'\'' {
             i += 1;
             while i < b.len() {
@@ -87,12 +118,28 @@ fn strip(line: &str) -> String {
         out.push(c as char);
         i += 1;
     }
-    out
+    (out, Lit::Code)
 }
 
-/// Advance past a raw-string body that started after the opening quote at `from`,
-/// closing on `"` followed by `hashes` `#`. Returns the index just past the close.
-fn skip_raw_string(b: &[u8], from: usize, hashes: usize) -> usize {
+/// Consume a normal string body from `from` (just past the opening `"`). Returns
+/// the index just past the closing `"`, or `None` if the string runs to EOL
+/// (a multi-line string continuing on the next line).
+fn consume_str(b: &[u8], from: usize) -> Option<usize> {
+    let mut i = from;
+    while i < b.len() {
+        match b[i] {
+            b'\\' => i += 2,
+            b'"' => return Some(i + 1),
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// Consume a raw-string body that started after the opening quote at `from`,
+/// closing on `"` followed by `hashes` `#`. Returns the index just past the
+/// close, or `None` if it runs to EOL (continuing on the next line).
+fn consume_raw(b: &[u8], from: usize, hashes: usize) -> Option<usize> {
     let mut i = from;
     while i < b.len() {
         if b[i] == b'"' {
@@ -103,12 +150,12 @@ fn skip_raw_string(b: &[u8], from: usize, hashes: usize) -> usize {
                 k += 1;
             }
             if seen == hashes {
-                return k;
+                return Some(k);
             }
         }
         i += 1;
     }
-    b.len()
+    None
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -173,6 +220,7 @@ pub fn rust_nontest_match_lines(text: &str, re: &Regex) -> Vec<(usize, String)> 
     let mut skip = false;
     let mut phase = Phase::Normal;
     let mut depth: i64 = 0;
+    let mut lit = Lit::Code;
 
     for (idx, raw) in text.lines().enumerate() {
         let nr = idx + 1;
@@ -180,8 +228,11 @@ pub fn rust_nontest_match_lines(text: &str, re: &Regex) -> Vec<(usize, String)> 
         // string-literal and `//` comment contents never count as real code. A
         // `#[cfg(test)]` mention inside a string or comment must NOT latch the
         // skip (that would hide the production code after it), and a pattern
-        // that only appears inside a literal/comment is not a real use.
-        let stripped = strip(raw);
+        // that only appears inside a literal/comment is not a real use. `lit`
+        // carries an unterminated string across lines so multi-line literals
+        // (e.g. test fixtures) are ignored in full.
+        let (stripped, next_lit) = strip(raw, lit);
+        lit = next_lit;
 
         if cfg_test_re().is_match(&stripped) {
             skip = true;
@@ -318,6 +369,28 @@ fn prod() { PROBE(x); }
         let hits = rust_nontest_match_lines(src, &re);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 3);
+    }
+
+    #[test]
+    fn multiline_string_fixture_is_not_real_code() {
+        // A multi-line string literal holding code-shaped text (a test fixture)
+        // must be stripped across line boundaries, so the `unwrap()` inside it is
+        // not flagged — while real code after the string still is.
+        let src = "\
+fn build() {
+    let _fixture = \"
+fn prod() {
+    x.unwrap();
+}
+\";
+}
+fn real() {
+    y.unwrap();
+}
+";
+        let hits = rust_nontest_match_lines(src, &panic_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 9);
     }
 
     #[test]

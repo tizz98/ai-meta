@@ -44,6 +44,11 @@ This fetches the latest release binary (checksum-verified) into
 Everything is a small `.meta/meta.toml`; omitted values inherit the baked
 profile. See `META.md` and `docs/` for details.
 
+To silence a single guard hit, add an inline `meta-allow: <guard-id>` marker in
+a comment on the offending line — any comment style works (`// meta-allow:
+no-panic-in-lib`, `# meta-allow: no-print-in-lib`, `/* … */`). List several ids
+comma-separated; the marker only suppresses the guards it names.
+
 ## Develop
 
 ```
