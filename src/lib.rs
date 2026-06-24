@@ -14,6 +14,7 @@ pub mod config;
 pub mod context;
 pub mod detect;
 pub mod error;
+pub mod github;
 pub mod output;
 pub mod process;
 pub mod profile;

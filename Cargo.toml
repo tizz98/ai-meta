@@ -27,6 +27,8 @@ regex = "1"
 walkdir = "2"
 toml_edit = "0.22"
 similar = "2"
+octocrab = "0.44"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 tempfile = "3"

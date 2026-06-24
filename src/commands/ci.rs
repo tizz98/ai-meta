@@ -97,10 +97,14 @@ pub fn run(args: CiArgs) -> anyhow::Result<i32> {
     );
 
     if let Some(pr) = args.pr {
-        output::note(format!(
-            "posting the collapsed result to PR #{pr} requires the GitHub layer (P6); comment body assembled below."
-        ));
-        println!("\n{body}");
+        let marker = format!("<!-- {}-local-ci -->", cfg.title);
+        match crate::github::Github::connect(&root) {
+            Ok(gh) => match crate::github::upsert_marked_comment(&gh, pr, &marker, &body) {
+                Ok(()) => output::ok(format!("posted Local CI result to PR #{pr}")),
+                Err(e) => output::warn(format!("could not post to PR #{pr}: {e}")),
+            },
+            Err(e) => output::warn(format!("GitHub not connected ({e}); comment not posted")),
+        }
     }
 
     Ok(if failed { 1 } else { 0 })
