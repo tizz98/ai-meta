@@ -22,22 +22,46 @@ impl Repo {
         format!("{}/{}", self.owner, self.name)
     }
 
-    /// Detect the repo from the `origin` remote of the git checkout at `root`.
+    /// Resolve the repo. Prefers the `GITHUB_REPOSITORY` env var (`owner/repo`,
+    /// the value GitHub Actions sets) so it works in CI and proxied checkouts
+    /// where the `origin` remote isn't a parseable github.com URL; otherwise it
+    /// parses the `origin` remote of the git checkout at `root`.
     pub fn detect(root: &Path) -> Result<Repo> {
+        if let Ok(slug) = std::env::var("GITHUB_REPOSITORY") {
+            if let Some(repo) = parse_slug(slug.trim()) {
+                return Ok(repo);
+            }
+        }
         let out = crate::process::run_captured("git remote get-url origin", root)
             .map_err(|e| Error::msg(format!("git remote get-url origin failed: {e}")))?;
         if out.status != 0 {
             return Err(Error::msg(
-                "no 'origin' remote — set one or run inside a GitHub clone.",
+                "no GitHub repo: set GITHUB_REPOSITORY=owner/repo or add a github.com 'origin' remote.",
             ));
         }
         parse_remote(out.stdout.trim()).ok_or_else(|| {
             Error::msg(format!(
-                "could not parse a GitHub repo from {:?}",
+                "could not parse a GitHub repo from {:?} (set GITHUB_REPOSITORY=owner/repo to override)",
                 out.stdout.trim()
             ))
         })
     }
+}
+
+/// Parse a bare `owner/repo` slug (e.g. `GITHUB_REPOSITORY`), stripping any
+/// trailing `.git`. Returns `None` unless it's exactly two non-empty segments.
+pub fn parse_slug(slug: &str) -> Option<Repo> {
+    let slug = slug.trim().trim_end_matches(".git");
+    let mut parts = slug.split('/');
+    let owner = parts.next()?.trim();
+    let name = parts.next()?.trim();
+    if owner.is_empty() || name.is_empty() || parts.next().is_some() {
+        return None;
+    }
+    Some(Repo {
+        owner: owner.to_string(),
+        name: name.to_string(),
+    })
 }
 
 /// Parse `owner/repo` from a github remote URL (ssh or https forms).
@@ -80,9 +104,10 @@ impl Github {
             .enable_all()
             .build()
             .map_err(|e| Error::msg(format!("tokio runtime: {e}")))?;
-        let crab = Octocrab::builder()
-            .personal_token(token)
-            .build()
+        // `Octocrab::build()` spawns a tower Buffer task, so it must run inside
+        // the runtime context — build it within `block_on`.
+        let crab = rt
+            .block_on(async { Octocrab::builder().personal_token(token).build() })
             .map_err(|e| Error::msg(format!("github client: {e}")))?;
         Ok(Github { crab, repo, rt })
     }
@@ -306,7 +331,15 @@ fn urlenc(s: &str) -> String {
 }
 
 fn api_err(e: octocrab::Error) -> Error {
-    Error::msg(format!("github API: {e}"))
+    // octocrab's Display for a GitHub API error is just "GitHub"; surface the
+    // status + message so failures (auth, 404, rate limit) are actionable.
+    let detail = match &e {
+        octocrab::Error::GitHub { source, .. } => {
+            format!("{} ({})", source.message, source.status_code)
+        }
+        other => other.to_string(),
+    };
+    Error::msg(format!("github API: {detail}"))
 }
 
 #[cfg(test)]
@@ -333,5 +366,20 @@ mod tests {
     fn rejects_non_github() {
         assert!(parse_remote("https://gitlab.com/a/b.git").is_none());
         assert!(parse_remote("garbage").is_none());
+    }
+
+    #[test]
+    fn parses_github_repository_slug() {
+        assert_eq!(
+            parse_slug("tizz98/ai-meta").unwrap().nwo(),
+            "tizz98/ai-meta"
+        );
+        assert_eq!(
+            parse_slug("tizz98/ai-meta.git").unwrap().nwo(),
+            "tizz98/ai-meta"
+        );
+        assert!(parse_slug("nope").is_none());
+        assert!(parse_slug("a/b/c").is_none());
+        assert!(parse_slug("").is_none());
     }
 }
