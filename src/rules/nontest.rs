@@ -176,23 +176,27 @@ pub fn rust_nontest_match_lines(text: &str, re: &Regex) -> Vec<(usize, String)> 
 
     for (idx, raw) in text.lines().enumerate() {
         let nr = idx + 1;
+        // Match, attribute-detect, and brace-count on the stripped line so that
+        // string-literal and `//` comment contents never count as real code. A
+        // `#[cfg(test)]` mention inside a string or comment must NOT latch the
+        // skip (that would hide the production code after it), and a pattern
+        // that only appears inside a literal/comment is not a real use.
+        let stripped = strip(raw);
 
-        // A `#[cfg(test)]` attribute (checked on the RAW line) resets the
-        // skip state, then we also process the remainder of this line.
-        if cfg_test_re().is_match(raw) {
+        if cfg_test_re().is_match(&stripped) {
             skip = true;
             phase = Phase::AwaitingItem;
             depth = 0;
-            advance(&strip(raw), &mut skip, &mut phase, &mut depth);
+            advance(&stripped, &mut skip, &mut phase, &mut depth);
             continue;
         }
 
         if skip {
-            advance(&strip(raw), &mut skip, &mut phase, &mut depth);
+            advance(&stripped, &mut skip, &mut phase, &mut depth);
             continue;
         }
 
-        if re.is_match(raw) {
+        if re.is_match(&stripped) {
             out.push((nr, raw.to_string()));
         }
     }
@@ -296,6 +300,38 @@ fn prod() { y.unwrap(); }
         let hits = rust_nontest_match_lines(src, &panic_re());
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 8);
+    }
+
+    #[test]
+    fn pattern_inside_string_or_comment_is_not_a_real_use() {
+        // The engine greps its own rule-definition files; a pattern that only
+        // appears inside a string literal or `//` comment (e.g. a guard's own
+        // message text) must not be flagged as a production use. A synthetic
+        // `PROBE(` token stands in for the real pattern so this fixture does not
+        // self-match when `meta check` scans this very file.
+        let re = Regex::new(r"PROBE\(").unwrap();
+        let src = "\
+let msg = \"PROBE( left in code\";
+// remember: forbid PROBE( everywhere
+fn prod() { PROBE(x); }
+";
+        let hits = rust_nontest_match_lines(src, &re);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 3);
+    }
+
+    #[test]
+    fn cfg_test_in_comment_does_not_skip_production() {
+        // A `#[cfg(test)]` mention inside a comment must NOT start the test-skip
+        // — otherwise the production code that follows evades the panic guard
+        // (a false-negative, the dangerous direction).
+        let src = "\
+// see #[cfg(test)]
+fn prod() { value.unwrap(); }
+";
+        let hits = rust_nontest_match_lines(src, &panic_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 2);
     }
 
     #[test]
