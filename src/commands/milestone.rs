@@ -32,7 +32,7 @@ pub fn run(args: MilestoneArgs) -> anyhow::Result<i32> {
                 let open = uint(m, "open_issues");
                 let closed = uint(m, "closed_issues");
                 let total = open + closed;
-                let pct = if total > 0 { closed * 100 / total } else { 0 };
+                let pct = (closed * 100).checked_div(total).unwrap_or(0);
                 println!(
                     "  {:>3}%  {}  ({}/{} done)",
                     pct,
