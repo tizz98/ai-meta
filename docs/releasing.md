@@ -18,23 +18,34 @@ release fails at the "verify tag matches crate version" step.
 1. Open a PR that bumps `version` in `Cargo.toml` (and the matching `Cargo.lock`
    entry — `cargo build` updates it; the `lockfile` check enforces it). Locally,
    `cargo run -- tag <level> --dry-run` shows the bump without touching anything.
-2. Merge to `main`. The `tag on version bump` workflow reads the new version and
-   pushes the matching `vX.Y.Z` tag automatically — so the tag can never disagree
-   with the file.
-3. The `release` workflow fires on that tag:
-   - `build` cross-compiles every target and uploads binaries to the release.
+2. Merge to `main`. The `release` workflow fires on the merge push and runs three
+   jobs **in one run**:
+   - `prepare` reads the new version and pushes the matching `vX.Y.Z` tag (skips
+     if the tag already exists, e.g. a Cargo.toml edit that didn't bump).
+   - `build` cross-compiles every target from the tag and uploads binaries.
    - `publish-crate` runs **after** every build succeeds (crates.io releases are
-     permanent), verifies the tag matches the crate version, then runs
-     `cargo publish --locked`.
+     permanent) and runs `cargo publish --locked`.
+
+To (re)ship the current version manually — or if a run needs re-triggering — use
+the workflow's **Run workflow** button (`workflow_dispatch`); it releases the
+version currently in `Cargo.toml`.
+
+## Why tag creation and release live in one workflow
+
+A tag pushed by a workflow using the default `GITHUB_TOKEN` does **not** trigger
+another workflow — GitHub suppresses it to prevent recursive runs. So a split
+design (one workflow auto-tags, a second releases `on: push: tags`) silently
+never releases: the release workflow's tag trigger is exactly the suppressed
+event. Folding tag creation and the release into a single run — triggered by the
+human merge push, which *does* trigger workflows — avoids that trap.
 
 ## Guardrails (why a mismatch can't ship)
 
-- **`tag-on-version.yml`** derives the tag from `Cargo.toml`, so the normal path
-  never produces a mismatched tag.
+- The tag is **derived from** `Cargo.toml` in `prepare`, so the tag and crate
+  version can't disagree, and `build`/`publish-crate` check out that exact tag.
 - **`lockfile.yml`** fails any PR whose `Cargo.lock` drifts from `Cargo.toml`, so
   `cargo publish --locked` never breaks on a stale lockfile.
-- **`release.yml`**'s verify step is the backstop: if a tag is ever pushed by
-  hand and doesn't match the crate version, the publish aborts before uploading.
+- `publish-crate` re-verifies the checked-out crate version before uploading.
 
 ## One-time setup
 

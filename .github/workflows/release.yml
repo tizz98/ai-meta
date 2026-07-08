@@ -1,14 +1,63 @@
 name: release
+# Releases are cut by bumping the [package] version in Cargo.toml via a PR.
+# When that merge lands on main, this workflow creates the matching vX.Y.Z tag
+# and, in the SAME run, builds the binaries and publishes to crates.io.
+#
+# Tag creation and release run in one workflow on purpose: a tag pushed by the
+# GITHUB_TOKEN does NOT trigger a separate `on: push: tags` workflow (GitHub
+# suppresses it to avoid recursion), so a split "auto-tag → release-on-tag"
+# design silently never releases. Keeping both in one run — triggered by the
+# human merge push — sidesteps that entirely.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: ["Cargo.toml"]
+  workflow_dispatch: {} # manual re-run (e.g. to (re)ship the current version)
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: tag if version is new
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - id: decide
+        shell: bash
+        run: |
+          version="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
+          tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            # Tag already exists. Only (re)release on an explicit manual dispatch;
+            # an ordinary Cargo.toml edit that didn't bump the version is a no-op.
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "Tag $tag exists — manual dispatch, will (re)release."
+              echo "release=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Tag $tag exists and version is unchanged — nothing to release."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
+            echo "Created and pushed $tag."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: build ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,6 +73,8 @@ jobs:
             os: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.prepare.outputs.version }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -50,26 +101,27 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.prepare.outputs.version }}
           files: |
             ai-meta-${{ matrix.target }}
             ai-meta-${{ matrix.target }}.sha256
 
   publish-crate:
     name: publish to crates.io
+    needs: [prepare, build]
+    if: needs.prepare.outputs.release == 'true'
     runs-on: ubuntu-latest
-    # Publish only after every target builds — crates.io releases are permanent.
-    needs: build
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.prepare.outputs.version }}
       - uses: dtolnay/rust-toolchain@stable
-      - name: Verify tag matches crate version
+      - name: Verify checkout matches the release version
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          crate="$(cargo metadata --no-deps --format-version 1 \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
-          if [ "$tag" != "$crate" ]; then
-            echo "::error::tag v$tag does not match Cargo.toml version $crate"
+          crate="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
+          if [ "$crate" != "${{ needs.prepare.outputs.version }}" ]; then
+            echo "::error::checked-out crate version $crate != release ${{ needs.prepare.outputs.version }}"
             exit 1
           fi
           echo "Publishing ai-meta v$crate"
