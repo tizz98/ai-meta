@@ -1,0 +1,23 @@
+name: lockfile
+# Guards against Cargo.lock drifting from Cargo.toml. The release publishes with
+# `cargo publish --locked`, which fails if the lockfile (including the crate's own
+# version) is stale — so a version bump that forgets Cargo.lock would break the
+# release. Catch it on the PR instead.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lockfile-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cargo.lock matches Cargo.toml
+        run: |
+          if ! cargo metadata --locked --format-version 1 >/dev/null; then
+            echo "::error::Cargo.lock is out of date with Cargo.toml. Run 'cargo build' and commit the updated Cargo.lock."
+            exit 1
+          fi
+          echo "Cargo.lock is in sync."
