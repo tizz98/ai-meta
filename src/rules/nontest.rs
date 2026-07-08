@@ -99,20 +99,35 @@ fn strip(line: &str, state: Lit) -> (String, Lit) {
                 None => return (out, Lit::Str),
             }
         }
-        // Char literal (coarse: to the next quote; single line only).
+        // Char literal vs. lifetime. A `'` opens a char literal only when it is
+        // an escape (`'\n'`, `'\''`) or a single char closed by another `'`
+        // (`'x'`). A Rust lifetime (`'static`, `'a`) also starts with `'` but is
+        // NOT closed by a quote — treating it as a char literal would consume to
+        // the next quote (often end-of-line), swallowing the `{`/`}`/`;` that the
+        // cfg(test)-skip balancer relies on and desyncing it, so test-only code
+        // gets flagged as production. Only enter char-literal mode for the two
+        // real forms; emit a lifetime tick as ordinary code and keep scanning.
         if c == b'\'' {
-            i += 1;
-            while i < b.len() {
-                if b[i] == b'\\' {
-                    i += 2;
-                    continue;
-                }
-                if b[i] == b'\'' {
-                    i += 1;
-                    break;
-                }
+            let is_escape = i + 1 < b.len() && b[i + 1] == b'\\';
+            let is_simple_char = i + 2 < b.len() && b[i + 2] == b'\'';
+            if is_escape || is_simple_char {
                 i += 1;
+                while i < b.len() {
+                    if b[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if b[i] == b'\'' {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+                continue;
             }
+            // Lifetime (or a stray quote): treat as code so braces after it count.
+            out.push('\'');
+            i += 1;
             continue;
         }
         out.push(c as char);
@@ -425,5 +440,48 @@ fn prod() { b.expect(\"x\"); }
         let hits = rust_nontest_match_lines(src, &panic_re());
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 11);
+    }
+
+    #[test]
+    fn lifetime_does_not_swallow_test_block_brace() {
+        // A `'static` (or any lifetime) on the block-opening line must NOT be
+        // mistaken for a char literal — otherwise the char scanner eats to the
+        // next quote / end of line, swallowing the `{` that opens the fn body,
+        // the balancer desyncs, and the cfg(test) skip drops early so test-only
+        // `unwrap()`s get flagged as production. Only the real production
+        // unwrap on the last line should be flagged.
+        let src = "\
+#[cfg(test)]
+mod tests {
+    fn boxed() -> Box<dyn Iterator<Item = ()> + 'static> {
+        thing.unwrap();
+    }
+    fn t() { other.unwrap(); }
+}
+fn prod() { value.unwrap(); }
+";
+        let hits = rust_nontest_match_lines(src, &panic_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 8);
+    }
+
+    #[test]
+    fn char_literal_with_brace_is_still_stripped() {
+        // The disambiguation must not regress real char literals: a `'{'` inside
+        // the test block must still be stripped so its brace doesn't unbalance
+        // the skip and leak onto the following production code.
+        let src = "\
+#[cfg(test)]
+mod tests {
+    fn t() {
+        let open = '{';
+        x.unwrap();
+    }
+}
+fn prod() { y.unwrap(); }
+";
+        let hits = rust_nontest_match_lines(src, &panic_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 8);
     }
 }
