@@ -46,7 +46,7 @@ pub fn run(id: GuardId, ctx: &GuardCtx) -> GuardResult {
             "no unwrap/expect/panic! in non-test code",
             "force-panic ops (unwrap/expect/panic!/unreachable!) in non-test code — prefer typed errors / graceful degradation",
         ),
-        GuardId::NoBlockingInAsync => nontest_scan(
+        GuardId::NoBlockingInAsync => blocking_in_async_scan(
             ctx,
             id,
             r"std::thread::sleep|std::fs::(read|write|File::)|reqwest::blocking",
@@ -130,6 +130,23 @@ fn nontest_scan(ctx: &GuardCtx, id: GuardId, pattern: &str, pass: &str, trip: &s
     }
     let re = compile(pattern);
     let hits = scan(ctx, &re, &[], true, id.name());
+    finish(hits, pass, trip)
+}
+
+/// Like [`nontest_scan`], but (for Rust) only reports matches inside `async`
+/// scopes — the precondition for a blocking call to actually be a problem.
+fn blocking_in_async_scan(
+    ctx: &GuardCtx,
+    id: GuardId,
+    pattern: &str,
+    pass: &str,
+    trip: &str,
+) -> GuardResult {
+    if !ctx.has_sources() {
+        return GuardResult::Skip("no sources yet".into());
+    }
+    let re = compile(pattern);
+    let hits = scan_async_blocking(ctx, &re, id.name());
     finish(hits, pass, trip)
 }
 
@@ -417,6 +434,38 @@ fn scan(
         let text = grep::read(&path);
         let matched = if exclude_tests && is_rust {
             super::nontest::rust_nontest_match_lines(&text, re)
+        } else {
+            grep::match_lines(&text, re)
+        };
+        for (line, text) in matched {
+            if is_allowed(&text, allow_id) {
+                continue;
+            }
+            out.push(Hit {
+                file: rel.clone(),
+                line,
+                text,
+            });
+        }
+    }
+    out
+}
+
+/// Test-excluding scan that, for Rust, reports only matches inside `async`
+/// scopes (via [`super::nontest::rust_async_blocking_match_lines`]). Non-Rust
+/// profiles fall back to a plain line scan — the blocking pattern is Rust-shaped,
+/// so this is effectively inert there.
+fn scan_async_blocking(ctx: &GuardCtx, re: &Regex, allow_id: &str) -> Vec<Hit> {
+    let is_rust = ctx.profile == ProfileKind::Rust;
+    let mut out = Vec::new();
+    for path in grep::collect_files(ctx.root, ctx.source_exts, &[]) {
+        let rel = grep::rel_display(ctx.root, &path);
+        if grep::is_test_path(&rel, ctx.source_exts) {
+            continue;
+        }
+        let text = grep::read(&path);
+        let matched = if is_rust {
+            super::nontest::rust_async_blocking_match_lines(&text, re)
         } else {
             grep::match_lines(&text, re)
         };

@@ -27,6 +27,15 @@ fn cfg_test_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"#\[cfg\(test\)\]").expect("static regex")) // meta-allow: no-panic-in-lib
 }
 
+/// The `async` keyword as a standalone word, opening an `async fn`, `async {}`,
+/// or `async move {}` scope. `\basync\b` deliberately does NOT match
+/// `async_trait` (a `_` follows, so there is no word boundary), so the common
+/// `#[async_trait]` attribute doesn't spuriously open a scope.
+fn async_kw_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\basync\b").expect("static regex")) // meta-allow: no-panic-in-lib
+}
+
 /// Tracks whether the scanner is inside a string literal that opened on an
 /// earlier line, so multi-line strings can be stripped across line boundaries.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -269,6 +278,94 @@ pub fn rust_nontest_match_lines(text: &str, re: &Regex) -> Vec<(usize, String)> 
     out
 }
 
+/// Like [`rust_nontest_match_lines`], but a hit must ALSO sit inside an
+/// `async fn` / `async {}` / `async move {}` scope. Used by
+/// `no-blocking-in-async`, whose premise — "blocking call in async code" — only
+/// holds inside async scopes; synchronous helpers doing `std::fs` are correct
+/// and must not be flagged.
+///
+/// Async-scope tracking is a heuristic sibling of the `#[cfg(test)]` balancer:
+/// it counts braces in production (non-test) code and remembers the depths at
+/// which async bodies opened, reporting a line only while inside one. It is
+/// deliberately biased toward the safe direction for a linter — a scope it fails
+/// to recognize (e.g. a hand-written `-> impl Future` with no `async` keyword)
+/// merely drops a warning, it never invents one. Known limits: a blocking call
+/// inside a `spawn_blocking`/`block_in_place` closure nested in an async fn still
+/// reads as "in async" (suppress those per-line with `meta-allow`), and a bare
+/// `async fn foo();` trait declaration is prevented from latching onto the next
+/// body by canceling the pending scope at its terminating `;`.
+pub fn rust_async_blocking_match_lines(text: &str, re: &Regex) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut skip = false;
+    let mut phase = Phase::Normal;
+    let mut depth: i64 = 0;
+    let mut lit = Lit::Code;
+
+    // Production-code brace depth and the depths at which open async bodies live.
+    let mut gdepth: i64 = 0;
+    let mut async_bodies: Vec<i64> = Vec::new();
+    // Seen an `async` opener whose body `{` has not arrived yet (multi-line
+    // signatures put the brace on a later line).
+    let mut pending_async = false;
+
+    for (idx, raw) in text.lines().enumerate() {
+        let nr = idx + 1;
+        let (stripped, next_lit) = strip(raw, lit);
+        lit = next_lit;
+
+        if cfg_test_re().is_match(&stripped) {
+            skip = true;
+            phase = Phase::AwaitingItem;
+            depth = 0;
+            advance(&stripped, &mut skip, &mut phase, &mut depth);
+            continue;
+        }
+        if skip {
+            advance(&stripped, &mut skip, &mut phase, &mut depth);
+            continue;
+        }
+
+        let in_async_before = !async_bodies.is_empty();
+        if async_kw_re().is_match(&stripped) {
+            pending_async = true;
+        }
+
+        // Walk the line's braces to keep `gdepth` and the async-body stack in
+        // sync; `entered` catches a one-line `async fn … { … }` whose scope opens
+        // and closes on the same line as the blocking call.
+        let mut entered = false;
+        for ch in stripped.bytes() {
+            match ch {
+                b'{' => {
+                    gdepth += 1;
+                    if pending_async {
+                        async_bodies.push(gdepth);
+                        pending_async = false;
+                        entered = true;
+                    }
+                }
+                b'}' => {
+                    if async_bodies.last() == Some(&gdepth) {
+                        async_bodies.pop();
+                    }
+                    if gdepth > 0 {
+                        gdepth -= 1;
+                    }
+                }
+                // A `;` before any body brace ends a bodyless `async fn foo();`
+                // declaration — don't let it latch onto the next fn's body.
+                b';' if pending_async => pending_async = false,
+                _ => {}
+            }
+        }
+
+        if (in_async_before || entered) && re.is_match(&stripped) {
+            out.push((nr, raw.to_string()));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -483,5 +580,95 @@ fn prod() { y.unwrap(); }
         let hits = rust_nontest_match_lines(src, &panic_re());
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, 8);
+    }
+
+    fn blocking_re() -> Regex {
+        Regex::new(r"std::thread::sleep|std::fs::(read|write|File::)").unwrap()
+    }
+
+    #[test]
+    fn blocking_flagged_inside_async_fn_only() {
+        // The same `std::fs::read` is a problem in the async fn and fine in the
+        // synchronous helper — only the async one is reported.
+        let src = "\
+async fn load() {
+    let _ = std::fs::read(\"a\");
+}
+fn load_sync() {
+    let _ = std::fs::read(\"b\");
+}
+";
+        let hits = rust_async_blocking_match_lines(src, &blocking_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 2);
+    }
+
+    #[test]
+    fn blocking_in_multiline_async_signature_body() {
+        // The body brace lands on a later line than the `async fn` keyword; the
+        // scanner must still know it is inside the async scope.
+        let src = "\
+async fn load(
+    path: &str,
+) -> Vec<u8> {
+    std::fs::read(path).unwrap_or_default()
+}
+";
+        let hits = rust_async_blocking_match_lines(src, &blocking_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 4);
+    }
+
+    #[test]
+    fn blocking_in_async_block_is_flagged() {
+        let src = "\
+fn spawn() {
+    tokio::spawn(async move {
+        std::fs::write(\"x\", b\"y\").ok();
+    });
+}
+";
+        let hits = rust_async_blocking_match_lines(src, &blocking_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 3);
+    }
+
+    #[test]
+    fn blocking_in_cfg_test_async_is_skipped() {
+        let src = "\
+#[cfg(test)]
+mod tests {
+    async fn t() {
+        std::fs::read(\"a\").unwrap();
+    }
+}
+";
+        let hits = rust_async_blocking_match_lines(src, &blocking_re());
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn bodyless_async_fn_decl_does_not_latch_onto_sync_fn() {
+        // A trait's `async fn` declaration has no body; its pending scope must be
+        // cancelled at the `;` so the following synchronous fn is not mistaken
+        // for async code.
+        let src = "\
+trait Loader {
+    async fn load(&self);
+}
+fn helper() {
+    let _ = std::fs::read(\"a\");
+}
+";
+        let hits = rust_async_blocking_match_lines(src, &blocking_re());
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn one_line_async_fn_with_blocking_is_flagged() {
+        let src = "async fn go() { std::fs::read(\"a\").ok(); }\n";
+        let hits = rust_async_blocking_match_lines(src, &blocking_re());
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, 1);
     }
 }
