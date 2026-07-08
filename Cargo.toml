@@ -4,9 +4,29 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
 description = "The LLM's missing meta framework — one versioned CLI that scaffolds, lints, and syncs project tooling across repos."
+authors = ["Eli Wilson <5739698+tizz98@users.noreply.github.com>"]
 license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/tizz98/ai-meta"
 repository = "https://github.com/tizz98/ai-meta"
+documentation = "https://github.com/tizz98/ai-meta"
+keywords = ["cli", "scaffold", "linter", "tooling", "framework"]
+categories = ["command-line-utilities", "development-tools"]
 default-run = "meta"
+
+# Keep the published crate to the buildable binary: source, lockfile, README,
+# and license. Repo-management artifacts (workflows, skills, the `./meta` shim,
+# docs) aren't needed by `cargo install ai-meta`.
+exclude = [
+  ".github/",
+  ".claude/",
+  ".meta/",
+  "docs/",
+  "META.md",
+  "install.sh",
+  "meta",
+  ".gitignore",
+]
 
 [[bin]]
 name = "meta"

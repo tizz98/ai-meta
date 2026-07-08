@@ -20,6 +20,13 @@ This fetches the latest release binary (checksum-verified) into
 `~/.local/bin`. Override with `AI_META_VERSION` (pin a version) or
 `AI_META_BIN_DIR` (install location). Then run `meta init` in a repo.
 
+If you have a Rust toolchain, you can install from crates.io instead (the crate
+is `ai-meta`, the binary is `meta`):
+
+```
+cargo install ai-meta
+```
+
 ## What it does
 
 - **`meta init`** — scaffold `.meta/meta.toml`, the `./meta` shim, GitHub Actions
