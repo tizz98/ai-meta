@@ -7,17 +7,34 @@ Cutting a release publishes two artifacts from a single `v*` tag:
 2. **crates.io** — the `ai-meta` crate, installable with `cargo install ai-meta`
    (the binary is named `meta`).
 
-Both are driven by `.github/workflows/release.yml`.
+## The version is the single source of truth
+
+`Cargo.toml`'s `[package] version` drives everything. **You never create a tag
+by hand** — hand-cutting a `vX.Y.Z` tag without bumping the file is exactly how a
+release fails at the "verify tag matches crate version" step.
 
 ## Steps
 
-1. `cargo run -- tag` (or `./meta tag`) — bumps the version across the configured
-   locations (`Cargo.toml`), commits, tags `vX.Y.Z`, and pushes.
-2. The `release` workflow fires on the pushed tag:
+1. Open a PR that bumps `version` in `Cargo.toml` (and the matching `Cargo.lock`
+   entry — `cargo build` updates it; the `lockfile` check enforces it). Locally,
+   `cargo run -- tag <level> --dry-run` shows the bump without touching anything.
+2. Merge to `main`. The `tag on version bump` workflow reads the new version and
+   pushes the matching `vX.Y.Z` tag automatically — so the tag can never disagree
+   with the file.
+3. The `release` workflow fires on that tag:
    - `build` cross-compiles every target and uploads binaries to the release.
    - `publish-crate` runs **after** every build succeeds (crates.io releases are
      permanent), verifies the tag matches the crate version, then runs
      `cargo publish --locked`.
+
+## Guardrails (why a mismatch can't ship)
+
+- **`tag-on-version.yml`** derives the tag from `Cargo.toml`, so the normal path
+  never produces a mismatched tag.
+- **`lockfile.yml`** fails any PR whose `Cargo.lock` drifts from `Cargo.toml`, so
+  `cargo publish --locked` never breaks on a stale lockfile.
+- **`release.yml`**'s verify step is the backstop: if a tag is ever pushed by
+  hand and doesn't match the crate version, the publish aborts before uploading.
 
 ## One-time setup
 
