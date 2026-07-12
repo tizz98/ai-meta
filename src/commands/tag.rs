@@ -1,4 +1,5 @@
 use crate::config::EffectiveConfig;
+use crate::profile::ProfileKind;
 use crate::version::{BumpLevel, Version};
 use crate::{config, context, output, process, state};
 use clap::Args;
@@ -106,6 +107,14 @@ pub fn run(args: TagArgs) -> anyhow::Result<i32> {
     }
     if changed_paths.is_empty() {
         anyhow::bail!("no version locations were updated — aborting before commit.");
+    }
+
+    // Keep a lockfile that pins the crate's own version in step with the bump.
+    // A stale Cargo.lock fails the `lockfile` CI gate and `cargo publish
+    // --locked`, so refresh and stage it as part of the release commit.
+    if let Some(lock) = sync_lockfile(&root, &cfg)? {
+        output::ok(format!("{lock} → {next}"));
+        changed_paths.push(lock);
     }
 
     // Commit, tag, push.
@@ -251,6 +260,36 @@ fn tag_exists(root: &Path, tag: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether this project has a lockfile that embeds the crate's own version and
+/// therefore needs resyncing after a version bump. Only Cargo does: `Cargo.lock`
+/// records `ai-meta v0.3.0`, which a bump to `0.4.0` leaves stale.
+fn should_sync_cargo_lock(root: &Path, profile: ProfileKind) -> bool {
+    profile == ProfileKind::Rust && root.join("Cargo.lock").is_file()
+}
+
+/// Refresh the lockfile so its pinned crate version matches the freshly-bumped
+/// manifest, returning the repo-relative path to stage (or `None` when the
+/// project has no such lockfile). Errors when a lockfile exists but cannot be
+/// resynced — committing a stale lock would break the release.
+fn sync_lockfile(root: &Path, cfg: &EffectiveConfig) -> anyhow::Result<Option<String>> {
+    if !should_sync_cargo_lock(root, cfg.profile_kind) {
+        return Ok(None);
+    }
+    // `cargo update --workspace` rewrites only the workspace members' own entries
+    // to match their manifests; registry dependencies are untouched. Prefer the
+    // offline run (fast, and the lock already resolves), then fall back to a
+    // networked one before giving up.
+    for cmd in [
+        "cargo update --workspace --offline",
+        "cargo update --workspace",
+    ] {
+        if matches!(process::run_captured(cmd, root), Ok(o) if o.status == 0) {
+            return Ok(Some("Cargo.lock".to_string()));
+        }
+    }
+    anyhow::bail!("failed to refresh Cargo.lock — refusing to commit a stale lockfile");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,5 +326,23 @@ mod tests {
         let (out, n) = rewrite(pkg, r#""version"\s*:"#, "0.3.0", "0.4.0");
         assert_eq!(n, 1);
         assert!(out.contains("\"version\": \"0.4.0\""));
+    }
+
+    #[test]
+    fn syncs_cargo_lock_only_for_rust_with_a_lockfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        // No Cargo.lock yet: nothing to sync even on a Rust project.
+        assert!(!should_sync_cargo_lock(root, ProfileKind::Rust));
+
+        std::fs::write(root.join("Cargo.lock"), "").unwrap();
+        // Rust + a lockfile present: sync it.
+        assert!(should_sync_cargo_lock(root, ProfileKind::Rust));
+        // Other profiles have no crate-version-pinning lockfile to touch, even if
+        // a stray Cargo.lock happens to sit in the tree.
+        assert!(!should_sync_cargo_lock(root, ProfileKind::TypeScript));
+        assert!(!should_sync_cargo_lock(root, ProfileKind::Python));
+        assert!(!should_sync_cargo_lock(root, ProfileKind::Generic));
     }
 }
