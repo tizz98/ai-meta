@@ -11,25 +11,31 @@ if [ -z "$ver" ]; then
   exit 1
 fi
 
+# `ext` is the executable suffix for the platform (empty everywhere but Windows).
+ext=""
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)   tgt=x86_64-unknown-linux-musl ;;
   Linux-aarch64)  tgt=aarch64-unknown-linux-musl ;;
   Darwin-arm64)   tgt=aarch64-apple-darwin ;;
   Darwin-x86_64)  tgt=x86_64-apple-darwin ;;
+  # Windows under Git Bash / MSYS2 / Cygwin, where `uname -s` reports
+  # MINGW64_NT-*, MSYS_NT-*, or CYGWIN_NT-*.
+  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) tgt=x86_64-pc-windows-msvc; ext=.exe ;;
   *) echo "meta: unsupported platform $(uname -s)-$(uname -m)" >&2; exit 1 ;;
 esac
 
 cache="${AI_META_CACHE:-$HOME/.cache/ai-meta}/$ver"
-bin="$cache/ai-meta-$tgt"
+asset="ai-meta-$tgt$ext"
+bin="$cache/$asset"
 
 if [ ! -x "$bin" ]; then
   mkdir -p "$cache"
   base="https://github.com/tizz98/ai-meta/releases/download/v$ver"
-  if ! curl -fsSL "$base/ai-meta-$tgt" -o "$bin.tmp"; then
+  if ! curl -fsSL "$base/$asset" -o "$bin.tmp"; then
     echo "meta: failed to download ai-meta v$ver for $tgt from $base" >&2
     exit 1
   fi
-  if curl -fsSL "$base/ai-meta-$tgt.sha256" -o "$bin.sha256" 2>/dev/null; then
+  if curl -fsSL "$base/$asset.sha256" -o "$bin.sha256" 2>/dev/null; then
     # The checksum file may be either "<sum>" or "<sum>  <name>"; normalize.
     sum="$(awk '{print $1}' "$bin.sha256")"
     if command -v sha256sum >/dev/null 2>&1; then

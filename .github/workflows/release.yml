@@ -71,6 +71,8 @@ jobs:
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,6 +94,12 @@ jobs:
         run: |
           bin="target/${{ matrix.target }}/release/meta"
           out="ai-meta-${{ matrix.target }}"
+          # Windows builds produce meta.exe; keep the .exe suffix on the asset so
+          # the shim (which appends .exe on Windows) resolves it.
+          if [ -f "$bin.exe" ]; then
+            bin="$bin.exe"
+            out="$out.exe"
+          fi
           cp "$bin" "$out"
           if command -v sha256sum >/dev/null; then
             sha256sum "$out" > "$out.sha256"
@@ -102,9 +110,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare.outputs.version }}
+          # Glob so the Windows leg's .exe assets are matched alongside the
+          # bare-binary assets on the other platforms.
           files: |
-            ai-meta-${{ matrix.target }}
-            ai-meta-${{ matrix.target }}.sha256
+            ai-meta-${{ matrix.target }}*
 
   publish-crate:
     name: publish to crates.io

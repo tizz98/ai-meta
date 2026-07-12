@@ -67,18 +67,12 @@ pub fn parse_slug(slug: &str) -> Option<Repo> {
 /// Parse `owner/repo` from a github remote URL (ssh or https forms).
 pub fn parse_remote(url: &str) -> Option<Repo> {
     let url = url.trim();
-    let rest = if let Some(r) = url.strip_prefix("git@github.com:") {
-        r.to_string()
-    } else if let Some(r) = url.strip_prefix("ssh://git@github.com/") {
-        r.to_string()
-    } else if let Some(r) = url.strip_prefix("https://github.com/") {
-        r.to_string()
-    } else if let Some(r) = url.strip_prefix("http://github.com/") {
-        r.to_string()
-    } else {
-        return None;
-    };
-    let rest = rest.strip_suffix(".git").unwrap_or(&rest);
+    let rest = url
+        .strip_prefix("git@github.com:")
+        .or_else(|| url.strip_prefix("ssh://git@github.com/"))
+        .or_else(|| url.strip_prefix("https://github.com/"))
+        .or_else(|| url.strip_prefix("http://github.com/"))?;
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
     let mut parts = rest.split('/');
     let owner = parts.next()?.to_string();
     let name = parts.next()?.to_string();

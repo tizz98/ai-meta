@@ -23,12 +23,16 @@ for cmd in curl uname mkdir chmod mv; do
   command -v "$cmd" >/dev/null 2>&1 || die "required command not found: $cmd"
 done
 
-# Map the host to a release target (mirrors ./meta shim).
+# Map the host to a release target (mirrors ./meta shim). `ext` is the
+# executable suffix, empty everywhere but Windows.
+ext=""
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)            tgt=x86_64-unknown-linux-musl ;;
   Linux-aarch64|Linux-arm64) tgt=aarch64-unknown-linux-musl ;;
   Darwin-arm64)            tgt=aarch64-apple-darwin ;;
   Darwin-x86_64)           tgt=x86_64-apple-darwin ;;
+  # Windows under Git Bash / MSYS2 / Cygwin.
+  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) tgt=x86_64-pc-windows-msvc; ext=.exe ;;
   *) die "unsupported platform $(uname -s)-$(uname -m)" ;;
 esac
 
@@ -43,7 +47,7 @@ else
   label="latest"
 fi
 
-asset="ai-meta-$tgt"
+asset="ai-meta-$tgt$ext"
 url="$base/$asset"
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/ai-meta-install.XXXXXX")"
@@ -73,9 +77,9 @@ fi
 
 mkdir -p "$bin_dir"
 chmod +x "$tmp/$asset"
-mv "$tmp/$asset" "$bin_dir/meta"
+mv "$tmp/$asset" "$bin_dir/meta$ext"
 
-err "installed meta -> $bin_dir/meta"
+err "installed meta -> $bin_dir/meta$ext"
 
 # Nudge the user if the install dir isn't on PATH.
 case ":$PATH:" in

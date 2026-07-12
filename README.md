@@ -27,6 +27,11 @@ is `ai-meta`, the binary is `meta`):
 cargo install ai-meta
 ```
 
+Prebuilt binaries ship for Linux (x86_64/aarch64, musl), macOS (Intel/Apple
+Silicon), and Windows (x86_64). On Windows, run `install.sh` and the `./meta`
+shim from Git Bash / MSYS2 / Cygwin; both resolve the `x86_64-pc-windows-msvc`
+build automatically.
+
 ## What it does
 
 - **`meta init`** — scaffold `.meta/meta.toml`, the `./meta` shim, GitHub Actions
