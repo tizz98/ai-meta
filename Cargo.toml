@@ -25,6 +25,7 @@ exclude = [
   "META.md",
   "install.sh",
   "meta",
+  "meta.cmd",
   ".gitignore",
 ]
 

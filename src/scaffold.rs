@@ -37,6 +37,8 @@ pub struct Artifact {
 }
 
 const SHIM: &str = include_str!("assets/shim.sh");
+const SHIM_CMD: &str = include_str!("assets/shim.cmd");
+const SHIM_PS1: &str = include_str!("assets/shim.ps1");
 const WF_META_CHECK: &str = include_str!("assets/workflows/meta-check.yml");
 const WF_ARCH: &str = include_str!("assets/workflows/arch-review.yml");
 const WF_CI: &str = include_str!("assets/workflows/ci.yml");
@@ -143,6 +145,24 @@ pub fn generated_artifacts(cfg: &EffectiveConfig) -> Vec<Artifact> {
         content: SHIM.to_string(),
         ownership: Ownership::Generated,
         executable: true,
+    });
+
+    // Windows launchers. `meta.cmd` at the repo root is the dispatcher that
+    // PowerShell (`./meta`) and cmd.exe (`.\meta`) both resolve; it relaunches
+    // PowerShell with -ExecutionPolicy Bypass into the real launcher, kept in
+    // .meta/ so PowerShell never prefers a root `.ps1` (which would be subject
+    // to execution policy) over the dispatcher.
+    out.push(Artifact {
+        path: "meta.cmd".into(),
+        content: SHIM_CMD.to_string(),
+        ownership: Ownership::Generated,
+        executable: false,
+    });
+    out.push(Artifact {
+        path: ".meta/shim.ps1".into(),
+        content: SHIM_PS1.to_string(),
+        ownership: Ownership::Generated,
+        executable: false,
     });
 
     // Workflows.
@@ -464,6 +484,32 @@ mod tests {
             .any(|p| p.starts_with(".claude/skills/meta-check/")));
         // shim is executable
         assert!(arts.iter().find(|a| a.path == "meta").unwrap().executable);
+    }
+
+    #[test]
+    fn generates_windows_launchers() {
+        let arts = generated_artifacts(&cfg("rust"));
+        let cmd = arts
+            .iter()
+            .find(|a| a.path == "meta.cmd")
+            .expect("meta.cmd artifact");
+        let ps1 = arts
+            .iter()
+            .find(|a| a.path == ".meta/shim.ps1")
+            .expect(".meta/shim.ps1 artifact");
+        // Both are wholesale-generated, non-executable data files.
+        assert_eq!(cmd.ownership, Ownership::Generated);
+        assert_eq!(ps1.ownership, Ownership::Generated);
+        assert!(!cmd.executable);
+        assert!(!ps1.executable);
+        // The dispatcher relaunches PowerShell with a policy bypass into the
+        // hidden shim; the shim targets the published Windows triple.
+        assert!(cmd.content.contains(".meta\\shim.ps1"));
+        assert!(cmd.content.contains("-ExecutionPolicy Bypass"));
+        assert!(ps1.content.contains("x86_64-pc-windows-msvc"));
+        // Crucially, NO root-level meta.ps1 (that would let PowerShell bypass the
+        // dispatcher and hit execution policy).
+        assert!(arts.iter().all(|a| a.path != "meta.ps1"));
     }
 
     #[test]

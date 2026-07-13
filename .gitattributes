@@ -1,0 +1,4 @@
+# Windows batch must be CRLF for maximum cmd.exe compatibility; the embedded
+# copy ships verbatim to every managed repo. PowerShell tolerates either — pin LF.
+*.cmd text eol=crlf
+*.ps1 text eol=lf
