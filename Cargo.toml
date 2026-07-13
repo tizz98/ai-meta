@@ -24,6 +24,7 @@ exclude = [
   "docs/",
   "META.md",
   "install.sh",
+  "install.ps1",
   "meta",
   "meta.cmd",
   ".gitignore",
