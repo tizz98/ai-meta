@@ -28,9 +28,19 @@ cargo install ai-meta
 ```
 
 Prebuilt binaries ship for Linux (x86_64/aarch64, musl), macOS (Intel/Apple
-Silicon), and Windows (x86_64). On Windows, run `install.sh` and the `./meta`
-shim from Git Bash / MSYS2 / Cygwin; both resolve the `x86_64-pc-windows-msvc`
-build automatically.
+Silicon), and Windows (x86_64).
+
+On Windows there are two paths. **Native PowerShell / cmd.exe** — install with
+
+```
+irm https://raw.githubusercontent.com/tizz98/ai-meta/main/install.ps1 | iex
+```
+
+then use `./meta <cmd>` in PowerShell or `.\meta <cmd>` in cmd.exe. The generated
+`meta.cmd` dispatcher relaunches PowerShell with an execution-policy bypass, so
+`./meta` works under any policy — no setup. **Git Bash / MSYS2 / Cygwin** — run
+`install.sh` and use the `./meta` bash shim as on Unix. All paths resolve the
+`x86_64-pc-windows-msvc` build automatically and share one download cache.
 
 ## What it does
 
