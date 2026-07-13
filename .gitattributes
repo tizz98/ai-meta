@@ -2,3 +2,10 @@
 # copy ships verbatim to every managed repo. PowerShell tolerates either — pin LF.
 *.cmd text eol=crlf
 *.ps1 text eol=lf
+# Bash scripts and the pinned-version file MUST stay LF: a CRLF shebang or a
+# CRLF `.meta/version` breaks the `./meta` bash shim under Git Bash on Windows,
+# and a CRLF src/assets/shim.sh would be embedded (include_str!) into the binary
+# and shipped as a broken shim to every managed repo.
+*.sh text eol=lf
+/meta text eol=lf
+.meta/version text eol=lf
