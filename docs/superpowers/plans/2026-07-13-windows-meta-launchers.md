@@ -132,9 +132,10 @@ if (-not (Test-Path -LiteralPath $bin)) {
     $haveSum = $true
   } catch { }
   if ($haveSum) {
-    $want = (((Get-Content -Raw -LiteralPath $sumFile).Trim()) -split '\s+')[0].ToLower()
+    $rawSum = Get-Content -Raw -LiteralPath $sumFile
+    $want = if ($rawSum) { (($rawSum.Trim()) -split '\s+')[0].ToLower() } else { '' }
     $have = (Get-FileHash -Algorithm SHA256 -LiteralPath $tmp).Hash.ToLower()
-    if ($want -and ($want -ne $have)) {
+    if ($want -ne $have) {
       Remove-Item -Force -LiteralPath $tmp
       [Console]::Error.WriteLine("meta: checksum mismatch for ai-meta v$ver ($tgt)")
       exit 1
