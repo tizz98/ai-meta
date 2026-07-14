@@ -10,5 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - name: Enforce codified standards
-        run: ./meta check --strict
+        run: cargo run --quiet -- check --strict

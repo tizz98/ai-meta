@@ -165,8 +165,18 @@ pub fn generated_artifacts(cfg: &EffectiveConfig) -> Vec<Artifact> {
         executable: false,
     });
 
-    // Workflows.
-    let wf_ctx = Ctx::new().var("title", &cfg.title);
+    // Workflows. In self-hosting mode (ai-meta managing itself) CI builds and
+    // runs the in-tree binary instead of the pinned `./meta` shim, so the repo
+    // validates its own meta.toml with the binary that defines the schema.
+    let meta_cmd = if cfg.self_hosting {
+        "cargo run --quiet --"
+    } else {
+        "./meta"
+    };
+    let wf_ctx = Ctx::new()
+        .var("title", &cfg.title)
+        .var("meta_cmd", meta_cmd)
+        .flag("self_hosting", cfg.self_hosting);
     out.push(Artifact {
         path: ".github/workflows/meta-check.yml".into(),
         content: render(WF_META_CHECK, &wf_ctx),
@@ -181,7 +191,8 @@ pub fn generated_artifacts(cfg: &EffectiveConfig) -> Vec<Artifact> {
     });
     let ci_ctx = Ctx::new()
         .var("toolchain_setup", toolchain_setup(cfg))
-        .var("extra_steps", extra_steps(cfg));
+        .var("extra_steps", extra_steps(cfg))
+        .var("meta_cmd", meta_cmd);
     out.push(Artifact {
         path: ".github/workflows/ci.yml".into(),
         content: render(WF_CI, &ci_ctx),
@@ -525,6 +536,56 @@ mod tests {
         let arts = generated_artifacts(&cfg("typescript"));
         let ci = arts.iter().find(|a| a.path.ends_with("ci.yml")).unwrap();
         assert!(ci.content.contains("setup-node"));
+    }
+
+    fn self_hosting_cfg() -> EffectiveConfig {
+        let toml = "[meta]\nprofile = \"rust\"\nself_hosting = true\n[project]\ntitle = \"demo\"\n";
+        config::load_from_str(&PathBuf::from("/tmp/demo"), toml).unwrap()
+    }
+
+    #[test]
+    fn self_hosting_workflows_build_in_tree_binary() {
+        let arts = generated_artifacts(&self_hosting_cfg());
+        let get = |suffix: &str| {
+            arts.iter()
+                .find(|a| a.path.ends_with(suffix))
+                .unwrap()
+                .content
+                .clone()
+        };
+        let check = get("meta-check.yml");
+        assert!(check.contains("cargo run --quiet -- check --strict"));
+        assert!(check.contains("dtolnay/rust-toolchain"));
+        assert!(!check.contains("./meta check"));
+
+        let arch = get("arch-review.yml");
+        assert!(arch.contains("cargo run --quiet -- arch || true"));
+        assert!(arch.contains("dtolnay/rust-toolchain"));
+
+        let ci = get("ci.yml");
+        assert!(ci.contains("cargo run --quiet -- ci"));
+        assert!(!ci.contains("./meta ci"));
+        assert!(ci.contains("dtolnay/rust-toolchain"));
+    }
+
+    #[test]
+    fn non_self_hosting_workflows_use_the_shim() {
+        let arts = generated_artifacts(&cfg("rust"));
+        let check = arts
+            .iter()
+            .find(|a| a.path.ends_with("meta-check.yml"))
+            .unwrap();
+        assert!(check.content.contains("./meta check --strict"));
+        assert!(!check.content.contains("cargo run"));
+        assert!(!check.content.contains("dtolnay/rust-toolchain"));
+
+        let arch = arts
+            .iter()
+            .find(|a| a.path.ends_with("arch-review.yml"))
+            .unwrap();
+        assert!(arch.content.contains("./meta arch || true"));
+        assert!(!arch.content.contains("cargo run"));
+        assert!(!arch.content.contains("dtolnay/rust-toolchain"));
     }
 
     #[test]

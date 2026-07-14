@@ -46,6 +46,7 @@ pub struct MetaTable {
     pub schema_version: Option<u32>,
     pub framework_version: Option<String>,
     pub profile: Option<String>,
+    pub self_hosting: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -11,4 +11,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 {{toolchain_setup}}{{extra_steps}}      - name: Local CI gate
-        run: ./meta ci
+        run: {{meta_cmd}} ci

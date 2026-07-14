@@ -43,6 +43,11 @@ pub struct EffectiveConfig {
     pub schema_version: u32,
     pub framework_version: String,
     pub profile_kind: ProfileKind,
+    /// When true, generated CI workflows build + run the in-tree meta binary
+    /// (`cargo run -- …`) instead of the pinned `./meta` shim. Only ai-meta
+    /// (and forks) set this — it lets the repo validate its own meta.toml with
+    /// the binary that defines the schema.
+    pub self_hosting: bool,
 
     pub title: String,
     pub board: String,
@@ -117,6 +122,7 @@ pub fn merge(
             .clone()
             .unwrap_or_else(|| crate::version::FRAMEWORK_VERSION.to_string()),
         profile_kind: profile.kind,
+        self_hosting: file.meta.self_hosting.unwrap_or(false),
 
         title,
         board,

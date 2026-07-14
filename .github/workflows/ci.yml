@@ -14,4 +14,4 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: Local CI gate
-        run: ./meta ci
+        run: cargo run --quiet -- ci
