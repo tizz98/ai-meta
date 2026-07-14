@@ -565,6 +565,7 @@ mod tests {
         let ci = get("ci.yml");
         assert!(ci.contains("cargo run --quiet -- ci"));
         assert!(!ci.contains("./meta ci"));
+        assert!(ci.contains("dtolnay/rust-toolchain"));
     }
 
     #[test]
@@ -577,6 +578,14 @@ mod tests {
         assert!(check.content.contains("./meta check --strict"));
         assert!(!check.content.contains("cargo run"));
         assert!(!check.content.contains("dtolnay/rust-toolchain"));
+
+        let arch = arts
+            .iter()
+            .find(|a| a.path.ends_with("arch-review.yml"))
+            .unwrap();
+        assert!(arch.content.contains("./meta arch || true"));
+        assert!(!arch.content.contains("cargo run"));
+        assert!(!arch.content.contains("dtolnay/rust-toolchain"));
     }
 
     #[test]
