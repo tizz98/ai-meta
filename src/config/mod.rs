@@ -285,4 +285,31 @@ mod tests {
         .unwrap_err();
         assert!(matches!(err, Error::Config(_)));
     }
+
+    #[test]
+    fn self_hosting_defaults_to_false() {
+        let cfg = load_from_str(
+            &root(),
+            r#"
+            [meta]
+            profile = "rust"
+        "#,
+        )
+        .unwrap();
+        assert!(!cfg.self_hosting);
+    }
+
+    #[test]
+    fn self_hosting_is_parsed() {
+        let cfg = load_from_str(
+            &root(),
+            r#"
+            [meta]
+            profile = "rust"
+            self_hosting = true
+        "#,
+        )
+        .unwrap();
+        assert!(cfg.self_hosting);
+    }
 }
