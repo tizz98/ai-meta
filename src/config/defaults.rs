@@ -11,6 +11,31 @@ use crate::rules::model::{CustomGuard, GuardId, ResolvedGuard, Severity, SignalI
 use std::path::PathBuf;
 use std::str::FromStr;
 
+/// Which release model `meta tag` follows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TagMode {
+    /// Bump, commit, create the tag, and push both commit and tag. `meta` owns
+    /// the tag (local-owns-tag). This is the default.
+    #[default]
+    Full,
+    /// Bump, commit, push the branch; skip tag creation and tag push so a
+    /// CI-owns-tag workflow creates the tag on merge.
+    BumpOnly,
+}
+
+impl TagMode {
+    /// Parse the `[tag] mode` string. `Err` carries a user-facing message.
+    pub fn parse(s: &str) -> std::result::Result<Self, String> {
+        match s.to_ascii_lowercase().as_str() {
+            "full" => Ok(TagMode::Full),
+            "bump-only" | "bump_only" => Ok(TagMode::BumpOnly),
+            other => Err(format!(
+                "invalid [tag] mode {other:?} — expected \"full\" or \"bump-only\""
+            )),
+        }
+    }
+}
+
 /// The fully-resolved configuration for a project.
 #[derive(Debug, Clone)]
 pub struct EffectiveConfig {
@@ -53,6 +78,7 @@ pub struct EffectiveConfig {
     pub default_bump: String,
     pub tag_prefix: String,
     pub require_branch: String,
+    pub tag_mode: TagMode,
 
     pub guards: Vec<ResolvedGuard>,
     pub signals: Vec<SignalId>,
@@ -170,6 +196,12 @@ pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConf
             .require_branch
             .clone()
             .unwrap_or_else(|| "main".into()),
+        tag_mode: file
+            .tag
+            .mode
+            .as_deref()
+            .and_then(|s| TagMode::parse(s).ok())
+            .unwrap_or_default(),
 
         guards: resolve_guards(profile, file),
         signals: resolve_signals(profile, file),

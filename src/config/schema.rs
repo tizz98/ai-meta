@@ -36,6 +36,8 @@ pub struct MetaFile {
     pub rules: RulesTable,
     #[serde(default)]
     pub sync: SyncTable,
+    #[serde(default)]
+    pub tag: TagTable,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -236,6 +238,14 @@ fn default_custom_severity() -> String {
 pub struct SyncTable {
     #[serde(default)]
     pub ignore: Vec<String>,
+}
+
+/// The `[tag]` table: how `meta tag` cuts a release. `mode` selects the release
+/// model — see [`super::defaults::TagMode`].
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TagTable {
+    pub mode: Option<String>,
 }
 
 impl MetaFile {
