@@ -413,17 +413,25 @@ mod tests {
 
     #[test]
     fn full_mode_plan_tags_pushes_and_guards_branch() {
-        let p = ReleasePlan::for_mode(TagMode::Full);
-        assert!(p.create_tag);
-        assert!(p.push_tag);
-        assert!(p.enforce_branch);
+        assert_eq!(
+            ReleasePlan::for_mode(TagMode::Full),
+            ReleasePlan {
+                create_tag: true,
+                push_tag: true,
+                enforce_branch: true,
+            }
+        );
     }
 
     #[test]
     fn bump_only_plan_skips_tag_push_and_branch_guard() {
-        let p = ReleasePlan::for_mode(TagMode::BumpOnly);
-        assert!(!p.create_tag);
-        assert!(!p.push_tag);
-        assert!(!p.enforce_branch);
+        assert_eq!(
+            ReleasePlan::for_mode(TagMode::BumpOnly),
+            ReleasePlan {
+                create_tag: false,
+                push_tag: false,
+                enforce_branch: false,
+            }
+        );
     }
 }
