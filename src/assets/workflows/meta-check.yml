@@ -10,5 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Enforce codified standards
-        run: ./meta check --strict
+{{#if self_hosting}}      - uses: dtolnay/rust-toolchain@stable
+{{/if}}      - name: Enforce codified standards
+        run: {{meta_cmd}} check --strict

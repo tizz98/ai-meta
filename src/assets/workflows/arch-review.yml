@@ -8,7 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Architecture review (advisory)
+{{#if self_hosting}}      - uses: dtolnay/rust-toolchain@stable
+{{/if}}      - name: Architecture review (advisory)
         # Advisory: ticket-candidate signals exit 2 but must not fail the job.
-        run: ./meta arch || true
+        run: {{meta_cmd}} arch || true
         # Marker for the upsert comment: <!-- {{title}}-arch-review -->
