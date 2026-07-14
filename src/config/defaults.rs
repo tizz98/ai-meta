@@ -25,7 +25,7 @@ pub enum TagMode {
 
 impl TagMode {
     /// Parse the `[tag] mode` string. `Err` carries a user-facing message.
-    pub fn parse(s: &str) -> std::result::Result<Self, String> {
+    pub fn parse(s: &str) -> Result<Self, String> {
         match s.to_ascii_lowercase().as_str() {
             "full" => Ok(TagMode::Full),
             "bump-only" | "bump_only" => Ok(TagMode::BumpOnly),
@@ -89,7 +89,12 @@ pub struct EffectiveConfig {
 }
 
 /// Build the effective config for `root` from a profile + parsed file.
-pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConfig {
+pub fn merge(
+    root: PathBuf,
+    profile: &Profile,
+    file: &MetaFile,
+    tag_mode: TagMode,
+) -> EffectiveConfig {
     let title = file
         .project
         .title
@@ -196,12 +201,7 @@ pub fn merge(root: PathBuf, profile: &Profile, file: &MetaFile) -> EffectiveConf
             .require_branch
             .clone()
             .unwrap_or_else(|| "main".into()),
-        tag_mode: file
-            .tag
-            .mode
-            .as_deref()
-            .and_then(|s| TagMode::parse(s).ok())
-            .unwrap_or_default(),
+        tag_mode,
 
         guards: resolve_guards(profile, file),
         signals: resolve_signals(profile, file),

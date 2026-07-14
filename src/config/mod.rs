@@ -45,16 +45,24 @@ pub fn load_from_str(root: &Path, text: &str) -> Result<EffectiveConfig> {
 
     // A typo'd tag mode is a hard error, not a silent fall back to full mode —
     // silently defaulting to full would re-introduce the release no-op #17 fixes.
-    if let Some(mode) = &file.tag.mode {
-        defaults::TagMode::parse(mode).map_err(|e| Error::Config(format!("meta.toml: {e}")))?;
-    }
+    let tag_mode = match &file.tag.mode {
+        Some(mode) => {
+            defaults::TagMode::parse(mode).map_err(|e| Error::Config(format!("meta.toml: {e}")))?
+        }
+        None => defaults::TagMode::default(),
+    };
 
     let kind = match &file.meta.profile {
         Some(name) => ProfileKind::parse(name)?,
         None => ProfileKind::Generic,
     };
     let profile = Profile::for_kind(kind);
-    Ok(defaults::merge(root.to_path_buf(), &profile, &file))
+    Ok(defaults::merge(
+        root.to_path_buf(),
+        &profile,
+        &file,
+        tag_mode,
+    ))
 }
 
 #[cfg(test)]
@@ -228,7 +236,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(cfg.tag_mode, crate::config::defaults::TagMode::Full);
+        assert_eq!(cfg.tag_mode, TagMode::Full);
     }
 
     #[test]
@@ -243,7 +251,9 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(cfg.tag_mode, crate::config::defaults::TagMode::BumpOnly);
+        assert_eq!(cfg.tag_mode, TagMode::BumpOnly);
+        assert_eq!(TagMode::parse("bump_only").unwrap(), TagMode::BumpOnly);
+        assert_eq!(TagMode::parse("BUMP-ONLY").unwrap(), TagMode::BumpOnly);
     }
 
     #[test]
@@ -258,7 +268,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(cfg.tag_mode, crate::config::defaults::TagMode::Full);
+        assert_eq!(cfg.tag_mode, TagMode::Full);
     }
 
     #[test]
