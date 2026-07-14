@@ -5,7 +5,7 @@ pub mod defaults;
 pub mod migrate;
 pub mod schema;
 
-pub use defaults::EffectiveConfig;
+pub use defaults::{EffectiveConfig, TagMode};
 pub use schema::MetaFile;
 
 use crate::error::{Error, Result};
@@ -43,12 +43,26 @@ pub fn load_from_str(root: &Path, text: &str) -> Result<EffectiveConfig> {
         }
     }
 
+    // A typo'd tag mode is a hard error, not a silent fall back to full mode —
+    // silently defaulting to full would re-introduce the release no-op #17 fixes.
+    let tag_mode = match &file.tag.mode {
+        Some(mode) => {
+            defaults::TagMode::parse(mode).map_err(|e| Error::Config(format!("meta.toml: {e}")))?
+        }
+        None => defaults::TagMode::default(),
+    };
+
     let kind = match &file.meta.profile {
         Some(name) => ProfileKind::parse(name)?,
         None => ProfileKind::Generic,
     };
     let profile = Profile::for_kind(kind);
-    Ok(defaults::merge(root.to_path_buf(), &profile, &file))
+    Ok(defaults::merge(
+        root.to_path_buf(),
+        &profile,
+        &file,
+        tag_mode,
+    ))
 }
 
 #[cfg(test)]
@@ -206,6 +220,66 @@ mod tests {
             [meta]
             profile = "rust"
             bogus_key = 1
+        "#,
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Config(_)));
+    }
+
+    #[test]
+    fn tag_mode_defaults_to_full() {
+        let cfg = load_from_str(
+            &root(),
+            r#"
+            [meta]
+            profile = "rust"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(cfg.tag_mode, TagMode::Full);
+    }
+
+    #[test]
+    fn tag_mode_bump_only_is_parsed() {
+        let cfg = load_from_str(
+            &root(),
+            r#"
+            [meta]
+            profile = "rust"
+            [tag]
+            mode = "bump-only"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(cfg.tag_mode, TagMode::BumpOnly);
+        assert_eq!(TagMode::parse("bump_only").unwrap(), TagMode::BumpOnly);
+        assert_eq!(TagMode::parse("BUMP-ONLY").unwrap(), TagMode::BumpOnly);
+    }
+
+    #[test]
+    fn tag_mode_full_is_parsed() {
+        let cfg = load_from_str(
+            &root(),
+            r#"
+            [meta]
+            profile = "rust"
+            [tag]
+            mode = "full"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(cfg.tag_mode, TagMode::Full);
+    }
+
+    #[test]
+    fn invalid_tag_mode_is_rejected() {
+        let err = load_from_str(
+            &root(),
+            r#"
+            [meta]
+            profile = "rust"
+            [tag]
+            mode = "sometimes"
         "#,
         )
         .unwrap_err();
