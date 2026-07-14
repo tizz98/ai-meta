@@ -4,7 +4,7 @@
 
 [meta]
 schema_version = 1
-framework_version = "0.4.0"
+framework_version = "0.5.0"
 profile = "rust"
 
 [project]
@@ -38,6 +38,12 @@ allowlist = [
   "regex", "walkdir", "similar", "octocrab", "tokio",
   "tempfile", "assert_cmd", "predicates",
 ]
+
+[tag]
+# CI owns tagging + publish (see .github/workflows/release.yml). `meta tag`
+# bumps + commits + pushes the branch, but must NOT create the tag or the
+# release workflow no-ops. See docs/releasing.md and issue #17.
+mode = "bump-only"
 
 [[version.locations]]
 path = "Cargo.toml"

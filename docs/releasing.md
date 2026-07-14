@@ -9,15 +9,20 @@ Cutting a release publishes two artifacts from a single `v*` tag:
 
 ## The version is the single source of truth
 
-`Cargo.toml`'s `[package] version` drives everything. **You never create a tag
-by hand** — hand-cutting a `vX.Y.Z` tag without bumping the file is exactly how a
-release fails at the "verify tag matches crate version" step.
+`Cargo.toml`'s `[package] version` drives everything. **You never create the tag
+locally** — neither by hand nor via `meta tag` (which runs in bump-only mode
+here). `release.yml` derives and pushes the tag from the merged version. Cutting
+a `vX.Y.Z` tag yourself is exactly how a release fails at the "verify tag matches
+crate version" step, or no-ops because the tag already exists.
 
 ## Steps
 
-1. Open a PR that bumps `version` in `Cargo.toml` (and the matching `Cargo.lock`
-   entry — `cargo build` updates it; the `lockfile` check enforces it). Locally,
-   `cargo run -- tag <level> --dry-run` shows the bump without touching anything.
+1. On a branch, run `cargo run -- tag <level>` (this repo runs `meta tag` in
+   **bump-only** mode — see `.meta/meta.toml`). It rewrites `Cargo.toml` + the
+   `Cargo.lock` entry, commits `chore: release vX.Y.Z`, and pushes the branch —
+   but does **not** create the tag, because `release.yml` owns tagging. Open a PR
+   from that branch. `cargo run -- tag <level> --dry-run` previews without
+   touching anything.
 2. Merge to `main`. The `release` workflow fires on the merge push and runs three
    jobs **in one run**:
    - `prepare` reads the new version and pushes the matching `vX.Y.Z` tag (skips
