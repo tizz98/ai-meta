@@ -1,4 +1,4 @@
-use crate::config::EffectiveConfig;
+use crate::config::{EffectiveConfig, TagMode};
 use crate::profile::ProfileKind;
 use crate::version::{BumpLevel, Version};
 use crate::{config, context, output, process, state};
@@ -17,6 +17,35 @@ pub struct TagArgs {
     /// Proceed even when not on the configured release branch.
     #[arg(long)]
     pub allow_branch: bool,
+}
+
+/// What a release run does, derived from the tag mode. Pure so the mode
+/// branching is unit-tested without touching git.
+#[derive(Debug, PartialEq, Eq)]
+struct ReleasePlan {
+    /// Create the annotated `vX.Y.Z` tag locally.
+    create_tag: bool,
+    /// Push the tag to origin (only meaningful when `create_tag`).
+    push_tag: bool,
+    /// Enforce the `require_branch` guard (bump-only cuts from a feature branch).
+    enforce_branch: bool,
+}
+
+impl ReleasePlan {
+    fn for_mode(mode: TagMode) -> Self {
+        match mode {
+            TagMode::Full => ReleasePlan {
+                create_tag: true,
+                push_tag: true,
+                enforce_branch: true,
+            },
+            TagMode::BumpOnly => ReleasePlan {
+                create_tag: false,
+                push_tag: false,
+                enforce_branch: false,
+            },
+        }
+    }
 }
 
 pub fn run(args: TagArgs) -> anyhow::Result<i32> {
@@ -41,8 +70,15 @@ pub fn run(args: TagArgs) -> anyhow::Result<i32> {
     let prefix = tag_prefix(&root, &cfg);
     let tagname = format!("{prefix}{next}");
     let branch = git_branch(&root).unwrap_or_default();
+    let plan = ReleasePlan::for_mode(cfg.tag_mode);
 
-    output::head(format!("Release: {cur} → {next}  (tag: {tagname})"));
+    let mode_label = match cfg.tag_mode {
+        TagMode::Full => "",
+        TagMode::BumpOnly => "  [bump-only]",
+    };
+    output::head(format!(
+        "Release: {cur} → {next}  (tag: {tagname}){mode_label}"
+    ));
 
     let planned = plan_changes(&root, &cfg, &cur, &next);
 
@@ -57,7 +93,7 @@ pub fn run(args: TagArgs) -> anyhow::Result<i32> {
         if !git_clean(&root) {
             output::warn("working tree is dirty — a real run would refuse.");
         }
-        if branch != cfg.require_branch && !args.allow_branch {
+        if plan.enforce_branch && branch != cfg.require_branch && !args.allow_branch {
             output::warn(format!(
                 "not on '{}' — a real run would refuse (use --allow-branch).",
                 cfg.require_branch
@@ -67,6 +103,14 @@ pub fn run(args: TagArgs) -> anyhow::Result<i32> {
             output::warn(format!(
                 "tag '{tagname}' already exists — a real run would refuse."
             ));
+        }
+        match cfg.tag_mode {
+            TagMode::Full => output::note(
+                "full mode: a real run would commit, tag, and push commit + tag.",
+            ),
+            TagMode::BumpOnly => output::note(
+                "bump-only: a real run would commit + push the branch and NOT create a tag (CI owns it).",
+            ),
         }
         output::note("dry run — nothing edited, committed, tagged, or pushed.");
         return Ok(0);
@@ -79,7 +123,7 @@ pub fn run(args: TagArgs) -> anyhow::Result<i32> {
     if !git_clean(&root) {
         anyhow::bail!("working tree is dirty — commit or stash first.");
     }
-    if branch != cfg.require_branch && !args.allow_branch {
+    if plan.enforce_branch && branch != cfg.require_branch && !args.allow_branch {
         anyhow::bail!(
             "not on '{}' (on '{branch}'). Re-run there, or pass --allow-branch.",
             cfg.require_branch
@@ -117,24 +161,45 @@ pub fn run(args: TagArgs) -> anyhow::Result<i32> {
         changed_paths.push(lock);
     }
 
-    // Commit, tag, push.
+    // Commit the bump.
     git(&root, &format!("git add -- {}", changed_paths.join(" ")))?;
     git(
         &root,
         &format!("git commit -m \"chore: release {tagname}\""),
     )?;
-    git(
-        &root,
-        &format!("git tag -a {tagname} -m \"Release {tagname}\""),
-    )?;
-    output::info("Pushing commit + tag to origin…");
-    git(&root, &format!("git push origin {branch}"))?;
-    git(&root, &format!("git push origin {tagname}"))?;
 
-    let _ = state::record(&root, "tag", "passed", &format!("{cur}->{next} {tagname}"));
-    output::ok(format!(
-        "released {tagname} ({cur} → {next}) and pushed to origin."
-    ));
+    // Tagging + push differ by mode. In bump-only, CI owns the tag; we only push
+    // the branch so the version-bump commit can go through a PR.
+    if plan.create_tag {
+        git(
+            &root,
+            &format!("git tag -a {tagname} -m \"Release {tagname}\""),
+        )?;
+    }
+    output::info(if plan.push_tag {
+        "Pushing commit + tag to origin…"
+    } else {
+        "Pushing bump commit to origin (CI owns the tag)…"
+    });
+    git(&root, &format!("git push origin {branch}"))?;
+    if plan.push_tag {
+        git(&root, &format!("git push origin {tagname}"))?;
+    }
+
+    match cfg.tag_mode {
+        TagMode::Full => {
+            let _ = state::record(&root, "tag", "passed", &format!("{cur}->{next} {tagname}"));
+            output::ok(format!(
+                "released {tagname} ({cur} → {next}) and pushed to origin."
+            ));
+        }
+        TagMode::BumpOnly => {
+            let _ = state::record(&root, "tag", "passed", &format!("{cur}->{next} bump-only"));
+            output::ok(format!(
+                "bumped to {next} on '{branch}' and pushed. Open a PR; CI tags + ships {tagname} on merge."
+            ));
+        }
+    }
     Ok(0)
 }
 
@@ -344,5 +409,21 @@ mod tests {
         assert!(!should_sync_cargo_lock(root, ProfileKind::TypeScript));
         assert!(!should_sync_cargo_lock(root, ProfileKind::Python));
         assert!(!should_sync_cargo_lock(root, ProfileKind::Generic));
+    }
+
+    #[test]
+    fn full_mode_plan_tags_pushes_and_guards_branch() {
+        let p = ReleasePlan::for_mode(TagMode::Full);
+        assert!(p.create_tag);
+        assert!(p.push_tag);
+        assert!(p.enforce_branch);
+    }
+
+    #[test]
+    fn bump_only_plan_skips_tag_push_and_branch_guard() {
+        let p = ReleasePlan::for_mode(TagMode::BumpOnly);
+        assert!(!p.create_tag);
+        assert!(!p.push_tag);
+        assert!(!p.enforce_branch);
     }
 }
