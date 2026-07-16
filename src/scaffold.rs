@@ -110,6 +110,12 @@ const SKILL_COMMANDS: &[(&str, &str, &str, &str)] = &[
         " [--strict] [--json]",
     ),
     (
+        "stats",
+        "Repo analytics — commits & lines of code.",
+        "Show commit counts by author (`commits [--user]`) or lines of code by language (`cloc [--lang]`); every subcommand supports --json.",
+        " <commits|cloc> [--json]",
+    ),
+    (
         "setup",
         "Bootstrap GitHub structure.",
         "Idempotently create labels, milestones, and the project board.",
@@ -495,6 +501,21 @@ mod tests {
             .any(|p| p.starts_with(".claude/skills/meta-check/")));
         // shim is executable
         assert!(arts.iter().find(|a| a.path == "meta").unwrap().executable);
+    }
+
+    #[test]
+    fn generates_stats_skill_and_docs() {
+        let arts = generated_artifacts(&cfg("rust"));
+        let skill = arts
+            .iter()
+            .find(|a| a.path == ".claude/skills/meta-stats/SKILL.md")
+            .expect("meta-stats skill artifact");
+        assert!(skill.content.contains("commits"));
+        assert!(skill.content.contains("cloc"));
+        assert!(skill.content.contains("--json"));
+
+        let meta_md = arts.iter().find(|a| a.path == "META.md").unwrap();
+        assert!(meta_md.content.contains("`./meta stats`"));
     }
 
     #[test]

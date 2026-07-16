@@ -9,6 +9,7 @@ pub mod gen;
 pub mod init;
 pub mod milestone;
 pub mod setup;
+pub mod stats;
 pub mod status;
 pub mod tag;
 pub mod task;
