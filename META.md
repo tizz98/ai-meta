@@ -19,6 +19,7 @@ Profile: **rust**
 | `./meta check` | Enforce codified standards (CI runs `--strict`) |
 | `./meta ci [PR]` | Local merge gate mirroring CI; posts a collapsed PR comment |
 | `./meta arch` | Architecture review (advisory) |
+| `./meta stats` | Repo analytics: commit counts by author, lines of code by language |
 | `./meta setup` | Idempotently create GitHub labels/milestones/board |
 | `./meta tag` | Cut a release (version bump + tag + push) |
 | `./meta upgrade` | Pull framework updates + migrate meta.toml |

@@ -47,6 +47,7 @@ fn init_rust_workspace_scaffolds_expected_files() {
     assert!(root.join(".github/workflows/meta-check.yml").is_file());
     assert!(root.join("CLAUDE.md").is_file());
     assert!(root.join(".claude/skills/meta-check/SKILL.md").is_file());
+    assert!(root.join(".claude/skills/meta-stats/SKILL.md").is_file());
 
     let toml = fs::read_to_string(root.join(".meta/meta.toml")).unwrap();
     assert!(toml.contains("profile = \"rust\""));

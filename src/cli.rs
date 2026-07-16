@@ -50,6 +50,8 @@ pub enum Command {
     Arch(commands::arch::ArchArgs),
     /// Idempotently create GitHub labels, milestones, and the Project board from config.
     Setup(commands::setup::SetupArgs),
+    /// Repo analytics: commit counts by author, lines of code by language.
+    Stats(commands::stats::StatsArgs),
     /// Cut a release: bump the version, commit, tag, and push.
     Tag(commands::tag::TagArgs),
     /// Update generated artifacts + migrate meta.toml to a newer framework version.
@@ -79,6 +81,7 @@ pub fn run() -> i32 {
         Command::Ci(args) => commands::ci::run(args),
         Command::Arch(args) => commands::arch::run(args),
         Command::Setup(args) => commands::setup::run(args),
+        Command::Stats(args) => commands::stats::run(args),
         Command::Tag(args) => commands::tag::run(args),
         Command::Upgrade(args) => commands::upgrade::run(args),
         Command::Version => {
