@@ -43,6 +43,10 @@ pub fn detect(root: &Path) -> Detection {
         det.kind = Some(ProfileKind::Rust);
         det.markers.push("Cargo.toml".into());
         infer_rust(root, &mut det);
+    } else if let Some(marker) = swift_marker(root) {
+        det.kind = Some(ProfileKind::Swift);
+        det.markers.push(marker.clone());
+        infer_swift(root, &marker, &mut det);
     } else if has("package.json") {
         det.kind = Some(ProfileKind::TypeScript);
         det.markers.push("package.json".into());
@@ -101,6 +105,37 @@ fn infer_rust(root: &Path, det: &mut Detection) {
     }
     if det.domains.is_empty() {
         det.domains = child_dirs(root, &["src"]);
+    }
+}
+
+/// The Swift marker present at `root`, if any: a SwiftPM `Package.swift` (checked
+/// first), else an Xcode `*.xcodeproj` / `*.xcworkspace` bundle.
+fn swift_marker(root: &Path) -> Option<String> {
+    if root.join("Package.swift").exists() {
+        return Some("Package.swift".into());
+    }
+    for e in std::fs::read_dir(root).ok()?.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.ends_with(".xcodeproj") || name.ends_with(".xcworkspace") {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn infer_swift(root: &Path, marker: &str, det: &mut Detection) {
+    // SwiftPM's `swift build` / `swift test` are already the profile defaults, so
+    // (like a Rust workspace) we don't restate them. An Xcode project needs a
+    // custom `xcodebuild` invocation we can't infer — leave a note instead.
+    if marker != "Package.swift" {
+        det.notes.push(format!(
+            "Xcode project ({marker}); set [commands] build/test to your xcodebuild invocation"
+        ));
+    }
+    // Swift targets live under Sources/ (SwiftPM); fall back to top-level dirs.
+    det.domains = child_dirs(&root.join("Sources"), &[]);
+    if det.domains.is_empty() {
+        det.domains = child_dirs(root, &["Tests"]);
     }
 }
 
@@ -265,6 +300,33 @@ mod tests {
         assert_eq!(d.kind, Some(ProfileKind::Rust));
         assert_eq!(d.commands.build.as_deref(), Some("cargo build"));
         assert_eq!(d.commands.test.as_deref(), Some("cargo test"));
+    }
+
+    #[test]
+    fn detects_swift_package() {
+        let tmp = tempdir().unwrap();
+        fs::write(
+            tmp.path().join("Package.swift"),
+            "// swift-tools-version:5.9\nimport PackageDescription\n",
+        )
+        .unwrap();
+        fs::create_dir_all(tmp.path().join("Sources").join("App")).unwrap();
+        fs::create_dir_all(tmp.path().join("Sources").join("Core")).unwrap();
+        let d = detect(tmp.path());
+        assert_eq!(d.kind, Some(ProfileKind::Swift));
+        assert_eq!(d.markers, vec!["Package.swift".to_string()]);
+        // SwiftPM commands equal the profile default, so they're not restated.
+        assert!(d.commands.build.is_none());
+        assert_eq!(d.domains, vec!["App", "Core"]);
+    }
+
+    #[test]
+    fn detects_swift_xcode_project() {
+        let tmp = tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("MyApp.xcodeproj")).unwrap();
+        let d = detect(tmp.path());
+        assert_eq!(d.kind, Some(ProfileKind::Swift));
+        assert!(d.notes.iter().any(|n| n.contains("xcodebuild")));
     }
 
     #[test]

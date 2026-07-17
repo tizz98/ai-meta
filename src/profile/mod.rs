@@ -6,6 +6,7 @@
 
 pub mod python;
 pub mod rust;
+pub mod swift;
 pub mod typescript;
 
 use crate::error::{Error, Result};
@@ -18,6 +19,7 @@ pub enum ProfileKind {
     Rust,
     TypeScript,
     Python,
+    Swift,
     Generic,
 }
 
@@ -27,6 +29,7 @@ impl ProfileKind {
             ProfileKind::Rust => "rust",
             ProfileKind::TypeScript => "typescript",
             ProfileKind::Python => "python",
+            ProfileKind::Swift => "swift",
             ProfileKind::Generic => "generic",
         }
     }
@@ -36,6 +39,7 @@ impl ProfileKind {
             "rust" => Ok(ProfileKind::Rust),
             "typescript" | "ts" | "javascript" | "js" => Ok(ProfileKind::TypeScript),
             "python" | "py" => Ok(ProfileKind::Python),
+            "swift" | "swiftpm" => Ok(ProfileKind::Swift),
             "generic" => Ok(ProfileKind::Generic),
             other => Err(Error::UnknownProfile(other.to_string())),
         }
@@ -99,6 +103,7 @@ impl Profile {
             ProfileKind::Rust => rust::profile(),
             ProfileKind::TypeScript => typescript::profile(),
             ProfileKind::Python => python::profile(),
+            ProfileKind::Swift => swift::profile(),
             ProfileKind::Generic => generic(),
         }
     }
@@ -173,6 +178,8 @@ mod tests {
         assert_eq!(ProfileKind::parse("ts").unwrap(), ProfileKind::TypeScript);
         assert_eq!(ProfileKind::parse("PY").unwrap(), ProfileKind::Python);
         assert_eq!(ProfileKind::parse("Rust").unwrap(), ProfileKind::Rust);
+        assert_eq!(ProfileKind::parse("Swift").unwrap(), ProfileKind::Swift);
+        assert_eq!(ProfileKind::parse("swiftpm").unwrap(), ProfileKind::Swift);
         assert!(ProfileKind::parse("cobol").is_err());
     }
 
@@ -182,6 +189,7 @@ mod tests {
             ProfileKind::Rust,
             ProfileKind::TypeScript,
             ProfileKind::Python,
+            ProfileKind::Swift,
             ProfileKind::Generic,
         ] {
             let p = Profile::for_kind(k);

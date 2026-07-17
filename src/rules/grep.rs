@@ -41,16 +41,21 @@ impl Hit {
 /// Whether `path` (relative to a scan root) is a test/bench/declaration file
 /// that guards exclude. `exts` are the language source extensions.
 pub fn is_test_path(rel: &str, exts: &[String]) -> bool {
-    if rel.contains("/tests/") || rel.starts_with("tests/") || rel.contains("/benches/") {
+    if rel.contains("/tests/")
+        || rel.starts_with("tests/")
+        || rel.contains("/Tests/")
+        || rel.starts_with("Tests/")
+        || rel.contains("/benches/")
+    {
         return true;
     }
     if rel.ends_with(".d.ts") {
         return true;
     }
-    // `_test.<ext>` (rust/go style) and `.test.`/`.spec.` (js/ts) and python
-    // `test_*.py` / `*_test.py`.
+    // `_test.<ext>` (rust/go style), `<Name>Tests.<ext>` (SwiftPM/XCTest style),
+    // `.test.`/`.spec.` (js/ts), and python `test_*.py` / `*_test.py`.
     for e in exts {
-        if rel.ends_with(&format!("_test.{e}")) {
+        if rel.ends_with(&format!("_test.{e}")) || rel.ends_with(&format!("Tests.{e}")) {
             return true;
         }
     }
@@ -151,15 +156,20 @@ mod tests {
 
     #[test]
     fn test_path_detection() {
-        let exts = vec!["rs".into(), "ts".into(), "py".into()];
+        let exts = vec!["rs".into(), "ts".into(), "py".into(), "swift".into()];
         assert!(is_test_path("crate/tests/it.rs", &exts));
         assert!(is_test_path("src/foo_test.rs", &exts));
         assert!(is_test_path("src/foo.test.ts", &exts));
         assert!(is_test_path("src/foo.spec.ts", &exts));
         assert!(is_test_path("pkg/test_foo.py", &exts));
         assert!(is_test_path("types/x.d.ts", &exts));
+        // SwiftPM/XCTest conventions: a capital-T `Tests/` dir and `<Name>Tests.swift`.
+        assert!(is_test_path("Tests/AppTests/AppTests.swift", &exts));
+        assert!(is_test_path("MyLibTests.swift", &exts));
         assert!(!is_test_path("src/foo.rs", &exts));
         assert!(!is_test_path("src/testing.rs", &exts));
+        // Product Swift files that merely end in "…ests.swift" are not tests.
+        assert!(!is_test_path("Sources/App/Requests.swift", &exts));
     }
 
     #[test]

@@ -173,6 +173,9 @@ fn fragility(ctx: &SignalCtx, files: &[std::path::PathBuf], watch: u32) -> Signa
         ProfileKind::Rust => r"\.unwrap\(\)|\.expect\(|panic!\(|unreachable!\(",
         ProfileKind::TypeScript => r"\bas any\b|as unknown as|@ts-ignore",
         ProfileKind::Python => r"except\s*:|# type: ignore",
+        ProfileKind::Swift => {
+            r"\btry!|\bas!|\bfatalError\(|\bpreconditionFailure\(|\bassertionFailure\(|\.unsafelyUnwrapped\b"
+        }
         ProfileKind::Generic => r"$^",
     };
     per_file_count(
