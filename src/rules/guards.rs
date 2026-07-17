@@ -424,9 +424,17 @@ fn swift_deps(root: &Path) -> Option<Vec<(String, String)>> {
     if !path.is_file() {
         return None;
     }
+    // Drop whole-line `//` comments so a commented-out dependency isn't counted
+    // (line-by-line, like rust_deps — multi-line non-commented calls survive).
+    let src = grep::read(&path);
+    let text = src
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let re = compile(r#"\.package\(\s*(?:name:\s*"[^"]*"\s*,\s*)?url:\s*"([^"]+)""#);
     let mut out = Vec::new();
-    for caps in re.captures_iter(&grep::read(&path)) {
+    for caps in re.captures_iter(&text) {
         let url = caps.get(1).map(|m| m.as_str()).unwrap_or("");
         let name = url
             .trim_end_matches('/')

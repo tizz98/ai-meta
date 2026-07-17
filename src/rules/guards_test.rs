@@ -209,6 +209,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.0.0"),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.0.0"),
         .package(path: "../LocalPkg"),
+        // .package(url: "https://github.com/evil/Removed.git", from: "1.0.0"),
     ]
 )
 "#,
@@ -231,6 +232,40 @@ let package = Package(
         }
         other => panic!("expected trip, got {other:?}"),
     }
+}
+
+#[test]
+fn no_print_in_lib_excludes_swiftpm_tests() {
+    let tmp = tempdir().unwrap();
+    let exts = vec!["swift".to_string()];
+    fs::create_dir_all(tmp.path().join("Sources/App")).unwrap();
+    fs::create_dir_all(tmp.path().join("Tests/AppTests")).unwrap();
+    // A print() in a SwiftPM test file must NOT trip (Tests/ is test code).
+    fs::write(
+        tmp.path().join("Tests/AppTests/AppTests.swift"),
+        "func testThing() { print(\"debug\") }\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        run(
+            GuardId::NoPrintInLib,
+            &ctx(tmp.path(), ProfileKind::Swift, &exts)
+        ),
+        GuardResult::Pass(_)
+    ));
+    // A print() in library code under Sources/ still trips.
+    fs::write(
+        tmp.path().join("Sources/App/App.swift"),
+        "func run() { print(\"leak\") }\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        run(
+            GuardId::NoPrintInLib,
+            &ctx(tmp.path(), ProfileKind::Swift, &exts)
+        ),
+        GuardResult::Trip { .. }
+    ));
 }
 
 #[test]
