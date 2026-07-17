@@ -196,6 +196,44 @@ fn deps_justified_rust_allowlist_and_doc() {
 }
 
 #[test]
+fn deps_justified_swift_from_package_manifest() {
+    let tmp = tempdir().unwrap();
+    let exts = vec!["swift".to_string()];
+    fs::write(
+        tmp.path().join("Package.swift"),
+        r#"// swift-tools-version:5.9
+import PackageDescription
+let package = Package(
+    name: "App",
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.0.0"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.0.0"),
+        .package(path: "../LocalPkg"),
+    ]
+)
+"#,
+    )
+    .unwrap();
+    let allow = vec!["swift-argument-parser".to_string()];
+    let c = GuardCtx {
+        root: tmp.path(),
+        profile: ProfileKind::Swift,
+        source_exts: &exts,
+        deps_allowlist: &allow,
+        deps_doc: Some("docs/dependencies.md"),
+    };
+    match run(GuardId::DepsJustified, &c) {
+        GuardResult::Trip { hits, .. } => {
+            // Allowlisted arg-parser passes; local `.package(path:)` is internal;
+            // only the undocumented snapshot-testing dependency trips.
+            assert_eq!(hits.len(), 1);
+            assert!(hits[0].contains("swift-snapshot-testing"));
+        }
+        other => panic!("expected trip, got {other:?}"),
+    }
+}
+
+#[test]
 fn custom_guard_trips() {
     let tmp = tempdir().unwrap();
     fs::create_dir_all(tmp.path().join("core")).unwrap();

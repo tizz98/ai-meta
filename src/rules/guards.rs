@@ -261,6 +261,7 @@ fn deps_justified(ctx: &GuardCtx) -> GuardResult {
         ProfileKind::Rust => rust_deps(ctx.root),
         ProfileKind::TypeScript => ts_deps(ctx.root),
         ProfileKind::Python => py_deps(ctx.root),
+        ProfileKind::Swift => swift_deps(ctx.root),
         ProfileKind::Generic => return GuardResult::Skip("no dependency model for generic".into()),
     };
     let declared = match declared {
@@ -413,6 +414,34 @@ fn py_name(spec: &str) -> String {
         .unwrap_or(spec)
         .trim()
         .to_string()
+}
+
+/// Package dependencies from a SwiftPM `Package.swift`, each identified by the
+/// repo name in its `.package(url: "…")` entry (last path segment, sans `.git`).
+/// Local `.package(path: …)` entries have no URL and are treated as internal.
+fn swift_deps(root: &Path) -> Option<Vec<(String, String)>> {
+    let path = root.join("Package.swift");
+    if !path.is_file() {
+        return None;
+    }
+    let re = compile(r#"\.package\(\s*(?:name:\s*"[^"]*"\s*,\s*)?url:\s*"([^"]+)""#);
+    let mut out = Vec::new();
+    for caps in re.captures_iter(&grep::read(&path)) {
+        let url = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        let name = url
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or(url)
+            .trim_end_matches(".git")
+            .to_string();
+        if !name.is_empty() {
+            out.push(("Package.swift".to_string(), name));
+        }
+    }
+    out.sort();
+    out.dedup();
+    Some(out)
 }
 
 // --- shared helpers ----------------------------------------------------------

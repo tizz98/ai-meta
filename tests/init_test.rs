@@ -98,6 +98,30 @@ fn init_autodetects_python() {
 }
 
 #[test]
+fn init_autodetects_swift_and_scaffolds_macos_ci() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    git_init(root);
+    fs::write(
+        root.join("Package.swift"),
+        "// swift-tools-version:5.9\nimport PackageDescription\n",
+    )
+    .unwrap();
+
+    meta(root).args(["init", "--no-ai"]).assert().success();
+
+    let toml = fs::read_to_string(root.join(".meta/meta.toml")).unwrap();
+    assert!(toml.contains("profile = \"swift\""));
+
+    let ci = fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
+    assert!(ci.contains("runs-on: macos-latest"));
+    assert!(!ci.contains("dtolnay/rust-toolchain"));
+
+    // `check` runs clean on the freshly-scaffolded Swift repo (no sources yet).
+    meta(root).arg("check").assert().success();
+}
+
+#[test]
 fn init_dry_run_writes_nothing() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();

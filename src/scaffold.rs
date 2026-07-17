@@ -196,6 +196,7 @@ pub fn generated_artifacts(cfg: &EffectiveConfig) -> Vec<Artifact> {
         executable: false,
     });
     let ci_ctx = Ctx::new()
+        .var("runs_on", runs_on(cfg))
         .var("toolchain_setup", toolchain_setup(cfg))
         .var("extra_steps", extra_steps(cfg))
         .var("meta_cmd", meta_cmd);
@@ -284,6 +285,16 @@ fn claude_md(cfg: &EffectiveConfig) -> String {
     )
 }
 
+/// The GitHub runner the CI `build`/`ci` job runs on. Swift builds need macOS
+/// (Xcode + the Swift toolchain are preinstalled there); every other profile
+/// runs on Linux.
+fn runs_on(cfg: &EffectiveConfig) -> &'static str {
+    match cfg.profile_kind {
+        ProfileKind::Swift => "macos-latest",
+        _ => "ubuntu-latest",
+    }
+}
+
 fn toolchain_setup(cfg: &EffectiveConfig) -> String {
     match cfg.profile_kind {
         ProfileKind::Rust => {
@@ -301,6 +312,9 @@ fn toolchain_setup(cfg: &EffectiveConfig) -> String {
         ProfileKind::Python => {
             "      - uses: actions/setup-python@v5\n        with:\n          python-version: \"3.12\"\n      - name: Install deps\n        run: pip install -e . || pip install -r requirements.txt || true\n".into()
         }
+        // macOS runners ship Xcode + the Swift toolchain, so no setup step is
+        // needed; the runner selection (macos-latest) is handled by `runs_on`.
+        ProfileKind::Swift => String::new(),
         ProfileKind::Generic => String::new(),
     }
 }
@@ -557,6 +571,22 @@ mod tests {
         let arts = generated_artifacts(&cfg("typescript"));
         let ci = arts.iter().find(|a| a.path.ends_with("ci.yml")).unwrap();
         assert!(ci.content.contains("setup-node"));
+    }
+
+    #[test]
+    fn swift_ci_runs_on_macos_without_toolchain() {
+        let arts = generated_artifacts(&cfg("swift"));
+        let ci = arts.iter().find(|a| a.path.ends_with("ci.yml")).unwrap();
+        assert!(ci.content.contains("runs-on: macos-latest"));
+        assert!(ci.content.contains("./meta ci"));
+        // No Linux toolchain setup for Swift (Xcode is preinstalled on macOS).
+        assert!(!ci.content.contains("dtolnay/rust-toolchain"));
+        assert!(!ci.content.contains("setup-node"));
+        assert!(!ci.content.contains("setup-python"));
+        // Non-Swift profiles still target Linux.
+        let rust_ci = generated_artifacts(&cfg("rust"));
+        let rci = rust_ci.iter().find(|a| a.path.ends_with("ci.yml")).unwrap();
+        assert!(rci.content.contains("runs-on: ubuntu-latest"));
     }
 
     fn self_hosting_cfg() -> EffectiveConfig {

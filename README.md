@@ -47,7 +47,7 @@ then use `./meta <cmd>` in PowerShell or `.\meta <cmd>` in cmd.exe. The generate
 - **`meta init`** — scaffold `.meta/meta.toml`, the `./meta` shim, GitHub Actions
   workflows, `CLAUDE.md` (with a managed block), `.claude/skills/meta-*`, and
   `META.md`. Auto-detects the language **profile** (rust / typescript / python /
-  generic) and infers build/test/lint commands + domains from the repo. Uses the
+  swift / generic) and infers build/test/lint commands + domains from the repo. Uses the
   `claude` CLI to tailor wording when available (deterministic fallback otherwise).
 - **`meta check` / `meta arch`** — a data-driven rule engine (guards + advisory
   architecture signals) with per-profile defaults, tunable thresholds, and custom
