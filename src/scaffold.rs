@@ -241,10 +241,15 @@ pub fn generated_artifacts(cfg: &EffectiveConfig) -> Vec<Artifact> {
         });
     }
 
-    // .gitignore additions (merge, never clobber).
+    // .gitignore additions (merge, never clobber). Swift repos also ignore the
+    // SwiftPM build/output dirs so a fresh repo doesn't commit (or scan) them.
+    let mut gitignore = String::from("/.meta/state/\n/.meta/bin/\n");
+    if matches!(cfg.profile_kind, ProfileKind::Swift) {
+        gitignore.push_str(".build/\n.swiftpm/\n");
+    }
     out.push(Artifact {
         path: ".gitignore".into(),
-        content: "/.meta/state/\n/.meta/bin/\n".into(),
+        content: gitignore,
         ownership: Ownership::AppendMerge,
         executable: false,
     });
@@ -587,6 +592,18 @@ mod tests {
         let rust_ci = generated_artifacts(&cfg("rust"));
         let rci = rust_ci.iter().find(|a| a.path.ends_with("ci.yml")).unwrap();
         assert!(rci.content.contains("runs-on: ubuntu-latest"));
+    }
+
+    #[test]
+    fn swift_gitignore_ignores_build_dirs() {
+        let arts = generated_artifacts(&cfg("swift"));
+        let gi = arts.iter().find(|a| a.path == ".gitignore").unwrap();
+        assert!(gi.content.contains(".build/"));
+        assert!(gi.content.contains(".swiftpm/"));
+        // Other profiles don't get the Swift ignores.
+        let rust = generated_artifacts(&cfg("rust"));
+        let rgi = rust.iter().find(|a| a.path == ".gitignore").unwrap();
+        assert!(!rgi.content.contains(".build/"));
     }
 
     fn self_hosting_cfg() -> EffectiveConfig {

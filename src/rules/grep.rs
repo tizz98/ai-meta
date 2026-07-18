@@ -15,6 +15,8 @@ const EXCLUDED_DIRS: &[&str] = &[
     "node_modules",
     "dist",
     "build",
+    ".build",
+    ".swiftpm",
     "coverage",
     ".venv",
     "venv",
@@ -152,6 +154,21 @@ mod tests {
         let files = collect_files(tmp.path(), &["rs".into()], &[]);
         let rels: Vec<_> = files.iter().map(|p| rel_display(tmp.path(), p)).collect();
         assert_eq!(rels, vec!["src/a.rs"]);
+    }
+
+    #[test]
+    fn skips_swift_build_and_swiftpm_dirs() {
+        let tmp = tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("Sources/App")).unwrap();
+        fs::create_dir_all(tmp.path().join(".build/debug")).unwrap();
+        fs::create_dir_all(tmp.path().join(".swiftpm")).unwrap();
+        fs::write(tmp.path().join("Sources/App/App.swift"), "let x = 1\n").unwrap();
+        // Generated SwiftPM build output must not be scanned as product code.
+        fs::write(tmp.path().join(".build/debug/runner.swift"), "let g = 2\n").unwrap();
+        fs::write(tmp.path().join(".swiftpm/state.swift"), "let s = 3\n").unwrap();
+        let files = collect_files(tmp.path(), &["swift".into()], &[]);
+        let rels: Vec<_> = files.iter().map(|p| rel_display(tmp.path(), p)).collect();
+        assert_eq!(rels, vec!["Sources/App/App.swift"]);
     }
 
     #[test]
