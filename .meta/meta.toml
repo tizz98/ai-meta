@@ -4,7 +4,7 @@
 
 [meta]
 schema_version = 1
-framework_version = "0.5.0"
+framework_version = "0.7.1"
 profile = "rust"
 # Build + run the in-tree binary in CI instead of the pinned ./meta shim, so
 # this repo validates its own meta.toml with the binary that defines the schema
